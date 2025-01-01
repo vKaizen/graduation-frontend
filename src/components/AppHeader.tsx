@@ -1,15 +1,30 @@
-import { Bell, User, Search } from "lucide-react";
+"use client";
 
-export function AppHeader() {
+import { Bell, User, Search, Menu } from "lucide-react";
+import { Dispatch, SetStateAction } from "react";
+
+interface AppHeaderProps {
+  toggleSidebar: Dispatch<SetStateAction<boolean>>;
+}
+
+export function AppHeader({ toggleSidebar }: AppHeaderProps) {
   return (
-    <header className="header flex justify-between items-center px-6 py-3 bg-gray-900 text-white shadow-md">
-      {/* Left Section: Logo/Title */}
+    <header className="header flex justify-between items-center px-4 py-2 bg-gray-900 text-white shadow-md">
+      {/* Left Section: Sidebar Toggle and Logo */}
       <div className="flex items-center space-x-4">
-        <h1 className="text-lg font-semibold">Asana Clone</h1>
+        {/* Sidebar Toggle Button */}
+        <button
+          type="button"
+          onClick={() => toggleSidebar((prev) => !prev)}
+          className="p-2 rounded-md hover:bg-gray-800 focus:outline-none"
+        >
+          <Menu className="w-6 h-6 text-gray-300" />
+        </button>
+        <h1 className="text-lg font-semibold">asana</h1>
       </div>
 
       {/* Middle Section: Search Bar */}
-      <div className="flex-1 mx-4">
+      <div className="flex-1 mx-6">
         <div className="relative">
           <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
           <input
@@ -21,7 +36,7 @@ export function AppHeader() {
       </div>
 
       {/* Right Section: Icons */}
-      <div className="flex items-center space-x-6">
+      <div className="flex items-center space-x-4">
         {/* Notification Icon */}
         <button
           type="button"
