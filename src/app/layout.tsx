@@ -1,33 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import AsanaSidebar from "@/components/app-sidebar";
 import { AppHeader } from "@/components/AppHeader";
+import { useState } from "react";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+}>) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev) => !prev);
+  };
 
   return (
-    <html lang="en"> {/* Add this tag */}
-      <body className="antialiased bg-gray-100"> {/* Add this tag */}
-        <div className="flex h-screen">
-          {/* Sidebar */}
-          <AsanaSidebar isCollapsed={isSidebarCollapsed} />
-
-          {/* Main Content Layout */}
-          <div className="flex-1 flex flex-col">
-            {/* Header */}
-            <AppHeader toggleSidebar={setIsSidebarCollapsed} />
-
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-100`}
+      >
+        <SidebarProvider>
+          {/* Header */}
+          <AppHeader toggleSidebar={toggleSidebar} />
+          <div className="flex pt-16">
+            {/* Sidebar */}
+            {isSidebarOpen && (
+              <div className="flex-none w-64 h-[calc(100vh-4rem)] overflow-y-auto bg-gray-900 scroll-container">
+                <AsanaSidebar isCollapsed={false}/>
+              </div>
+            )}
             {/* Main Content */}
-            <main className="flex-1 overflow-y-auto p-6 bg-gray-100">{children}</main>
+            <div className="flex-grow p-6 overflow-y-auto h-[calc(100vh-4rem)] scroll-container">
+              {children}
+            </div>
           </div>
-        </div>
+        </SidebarProvider>
       </body>
     </html>
   );
