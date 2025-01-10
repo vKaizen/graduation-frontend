@@ -1,8 +1,11 @@
-// Assuming you are using TypeScript
 "use client";
 
-import "./globals.css";
 import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { useState } from "react";
+import { AppSidebar } from "@/components/app-sidebar";
+import  AppHeader  from "@/components/AppHeader";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,50 +17,28 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Define a TypeScript interface for the user prop
-interface IUser {
-  name: string;
-}
-
-interface HeaderBarProps {
-  user: IUser;
-}
-
-const HeaderBar = ({ user }: HeaderBarProps) => {
-  return (
-    <div style={{ background: "#333", color: "white", padding: "10px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-      <div>
-        <h2>{`Hello, ${user.name}`}</h2>
-      </div>
-      <div>
-        <input type="text" placeholder="Search" style={{ padding: "8px", marginRight: "10px" }} />
-        <button style={{ background: "none", border: "none", color: "white" }}>
-          Customize
-        </button>
-      </div>
-    </div>
-  );
-};
-
-interface RootLayoutProps {
-  children: React.ReactNode;
-  user?: IUser;  // Optional user prop
-}
-
 export default function RootLayout({
   children,
-  user = { name: "Default User" },  // Providing a default user if none is provided
-}: RootLayoutProps) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  
+
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-100`}>
-        <div className="flex">
-          {/* Header Bar */}
-          <HeaderBar user={user} />
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-100`}
+      >
+        
+        {/* Main Layout */}
+        <div className="flex pt-18">
+          {/* Sidebar */}
+          
+          
           {/* Main Content */}
-          <main className="flex-grow p-6">
+          <div className="flex-grow p-10 overflow-y-auto h-[calc(100vh-4rem)]">
             {children}
-          </main>
+          </div>
         </div>
       </body>
     </html>

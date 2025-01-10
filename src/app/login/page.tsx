@@ -1,10 +1,11 @@
-import { GalleryVerticalEnd } from "lucide-react"
-import { LoginForm } from "@/components/login-form"
-import Image from 'next/image';
+import { GalleryVerticalEnd } from "lucide-react";
+import Image from "next/image";
+import { LoginForm } from "@/components/login-form";
 
 export default function LoginPage() {
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
+    <div className="grid min-h-screen lg:grid-cols-2">
+      {/* Left Side */}
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex justify-center gap-2 md:justify-start">
           <a href="#" className="flex items-center gap-2 font-medium">
@@ -20,15 +21,18 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Right Side */}
       <div className="relative hidden bg-muted lg:block">
       <Image
-          src=""
+          src="/Boyyy.png"
           alt="Image"
           layout="fill"
-          objectFit="cover"
+          objectFit="fill"
           className="dark:brightness-[0.2] dark:grayscale"
         />
       </div>
     </div>
-  )
+  );
 }
+
