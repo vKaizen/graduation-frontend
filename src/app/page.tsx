@@ -1,101 +1,194 @@
-import Image from "next/image";
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ArrowRight, CheckCircle, Zap } from "lucide-react"
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="min-h-screen bg-gradient-to-b from-[#272638] to-[#1a1726] text-white">
+      <header className="container mx-auto px-4 py-8 flex justify-between items-center">
+        <div className="flex items-center space-x-2">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="h-8 w-8 text-[#0B5269]"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l7 4.5-7 4.5z" />
+          </svg>
+          <span className="text-2xl font-bold">Avana</span>
         </div>
+        <nav>
+          <ul className="flex space-x-6">
+            <li>
+              <Link href="#features" className="hover:text-[#0B5269]">
+                Features
+              </Link>
+            </li>
+            <li>
+              <Link href="#pricing" className="hover:text-[#0B5269]">
+                Pricing
+              </Link>
+            </li>
+            <li>
+              <Link href="#about" className="hover:text-[#0B5269]">
+                About
+              </Link>
+            </li>
+          </ul>
+        </nav>
+      </header>
+
+      <main>
+        <section className="container mx-auto px-4 py-20 text-center">
+          <h1 className="text-5xl font-bold mb-6">Supercharge Your Teams Productivity with AI</h1>
+          <p className="text-xl mb-8 max-w-2xl mx-auto">
+            Avana is the all-in-one AI-powered platform that helps teams collaborate, manage projects, and boost
+            productivity like never before.
+          </p>
+          <div className="flex justify-center space-x-4">
+            <Button size="lg" className="bg-[#0B5269] hover:bg-[#0B5269]/90">
+              Get Started Free
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button size="lg" variant="outline">
+              Watch Demo
+            </Button>
+          </div>
+        </section>
+
+        <section id="features" className="container mx-auto px-4 py-20">
+          <h2 className="text-3xl font-bold mb-12 text-center">Key Features</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              {
+                title: "AI-Powered Task Management",
+                description: "Let our AI organize and prioritize your tasks for maximum efficiency.",
+                icon: <Zap className="h-12 w-12 text-[#0B5269]" />,
+              },
+              {
+                title: "Smart Collaboration",
+                description: "Real-time collaboration with AI-suggested team members for each task.",
+                icon: <CheckCircle className="h-12 w-12 text-[#0B5269]" />,
+              },
+              {
+                title: "Predictive Analytics",
+                description: "Forecast project timelines and resource needs with our advanced AI.",
+                icon: <ArrowRight className="h-12 w-12 text-[#0B5269]" />,
+              },
+            ].map((feature, index) => (
+              <Card key={index} className="bg-[#2f2d45] border-0">
+                <CardHeader>
+                  <div className="mb-4">{feature.icon}</div>
+                  <CardTitle>{feature.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p>{feature.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section id="pricing" className="container mx-auto px-4 py-20">
+          <h2 className="text-3xl font-bold mb-12 text-center">Simple, Transparent Pricing</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              {
+                title: "Starter",
+                price: "$9",
+                description: "Perfect for small teams",
+                features: ["AI Task Management", "Basic Collaboration", "5 Team Members"],
+              },
+              {
+                title: "Pro",
+                price: "$29",
+                description: "Ideal for growing businesses",
+                features: ["Everything in Starter", "Smart Collaboration", "Predictive Analytics", "25 Team Members"],
+              },
+              {
+                title: "Enterprise",
+                price: "Custom",
+                description: "For large organizations",
+                features: ["Everything in Pro", "Dedicated Support", "Custom Integrations", "Unlimited Team Members"],
+              },
+            ].map((plan, index) => (
+              <Card key={index} className="bg-[#2f2d45] border-0">
+                <CardHeader>
+                  <CardTitle>{plan.title}</CardTitle>
+                  <CardDescription>
+                    <span className="text-3xl font-bold text-white">{plan.price}</span>
+                    {plan.price !== "Custom" && <span className="text-gray-400">/month</span>}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="mb-4">{plan.description}</p>
+                  <ul className="space-y-2">
+                    {plan.features.map((feature, featureIndex) => (
+                      <li key={featureIndex} className="flex items-center">
+                        <CheckCircle className="h-5 w-5 text-[#0B5269] mr-2" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-[#2f2d45] py-20">
+          <div className="container mx-auto px-4">
+            <h2 className="text-3xl font-bold mb-8 text-center">Ready to Transform Your Workflow?</h2>
+            <p className="text-xl mb-8 text-center max-w-2xl mx-auto">
+              Join thousands of teams already using Avana to supercharge their productivity.
+            </p>
+            <form className="flex flex-col md:flex-row justify-center items-center space-y-4 md:space-y-0 md:space-x-4">
+              <Input
+                type="email"
+                placeholder="Enter your email"
+                className="max-w-sm bg-[#272638] border-0 text-white"
+              />
+              <Button size="lg" className="bg-[#0B5269] hover:bg-[#0B5269]/90">
+                Start Free Trial
+              </Button>
+            </form>
+          </div>
+        </section>
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      <footer className="bg-[#1a1726] py-12">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center space-x-2 mb-4 md:mb-0">
+              <Zap className="h-6 w-6 text-[#0B5269]" />
+              <span className="text-xl font-bold">Avana</span>
+            </div>
+            <nav>
+              <ul className="flex space-x-6">
+                <li>
+                  <Link href="#" className="hover:text-[#0B5269]">
+                    Privacy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-[#0B5269]">
+                    Terms
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-[#0B5269]">
+                    Contact
+                  </Link>
+                </li>
+              </ul>
+            </nav>
+          </div>
+          <div className="mt-8 text-center text-gray-400">© 2025 Avana. All rights reserved.</div>
+        </div>
       </footer>
     </div>
-  );
+  )
 }
+
