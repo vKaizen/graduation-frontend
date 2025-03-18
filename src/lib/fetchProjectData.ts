@@ -1,12 +1,14 @@
-export async function fetchProjectData(projectId: string) {
-  const projects: Record<string, { id: string; name: string; color: string }> =
-    {
-      AboRas: { id: "AboRas", name: "AboRas", color: "bg-purple-500" },
-      "Cross-functional": {
-        id: "Cross-functional",
-        name: "Cross-functional",
-        color: "bg-teal-500",
-      },
-    };
-  return projects[projectId] || null;
+import { fetchProject } from "@/api-service";
+import { Project } from "@/types";
+
+export async function fetchProjectData(
+  projectId: string
+): Promise<Project | null> {
+  try {
+    const project = await fetchProject(projectId); // Fetch project data from API
+    return project;
+  } catch (error) {
+    console.error("Error fetching project data:", error);
+    return null;
+  }
 }

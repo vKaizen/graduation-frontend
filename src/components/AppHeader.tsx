@@ -1,7 +1,16 @@
 "use client";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { List, Plus, Check, FileText, MessageCircle, Briefcase, Target, UserPlus } from "lucide-react";
+import {
+  List,
+  Plus,
+  Check,
+  FileText,
+  MessageCircle,
+  Briefcase,
+  Target,
+  UserPlus,
+} from "lucide-react";
 import { useState } from "react";
 
 export default function AppHeader({ className }: { className?: string }) {
@@ -25,7 +34,9 @@ export default function AppHeader({ className }: { className?: string }) {
       </div>
 
       {/* Title */}
-      <div className="text-lg font-bold text-gray-800 dark:text-white">Avana</div>
+      <div className="text-lg font-bold text-gray-800 dark:text-white">
+        Avana
+      </div>
 
       {/* Right-Side Actions */}
       <div className="relative flex items-center space-x-4">
