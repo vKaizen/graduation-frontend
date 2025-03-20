@@ -8,7 +8,10 @@ import { cn } from "@/lib/utils"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Project, Task } from "@/types"
+import type { Project, Task } from "@/types"
+// First, add the import for TaskDetails at the top of the file
+import { TaskDetails } from "./task-details"
+import type { TaskDetails as TaskDetailsType } from "@/types"
 
 interface ListViewProps {
   project: Project
@@ -38,6 +41,8 @@ export function ListView({
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null)
   const [newTaskData, setNewTaskData] = useState<Record<string, Omit<Task, "id"> & { isCreating: boolean }>>({})
   const [editingTask, setEditingTask] = useState<{ sectionId: string; taskId: string } | null>(null)
+  // Add a new state for the selected task details after the existing state declarations
+  const [selectedTask, setSelectedTask] = useState<TaskDetailsType | null>(null)
 
   const handleUpdateSectionName = (sectionId: string, newName: string) => {
     updateSectionName(sectionId, newName)
@@ -110,6 +115,79 @@ export function ListView({
       }
       handleCancelCreate(sectionId)
     }
+  }
+
+  // Add a handleTaskClick function after the handleKeyDown function
+  const handleTaskClick = (task: Task, sectionId: string) => {
+    // Don't open task details if we're in edit mode
+    if (editingTask?.sectionId === sectionId && editingTask?.taskId === task.id) {
+      return
+    }
+
+    setSelectedTaskId(task.id)
+
+    // Find the section this task belongs to
+    const section = project.sections.find((s) => s.id === sectionId)
+    const sectionName = section ? section.title : "Unknown Section"
+
+    // Convert Task to TaskDetailsType with more detailed information
+    const taskDetails: TaskDetailsType = {
+      ...task,
+      description: task.description || "", // Use existing description if available
+      activities: [
+        {
+          type: "created",
+          user: "Ka",
+          timestamp: "Yesterday at 1:28am",
+        },
+        {
+          type: "updated",
+          user: "Ka",
+          timestamp: "Yesterday at 6:29am",
+          content: "Changed priority to " + (task.priority || "None"),
+        },
+      ],
+      subtasks: [], // Initialize with an empty array instead of default subtasks
+      collaborators: ["Ka", "JD"],
+      project: {
+        id: project.id,
+        name: project.name,
+        status: sectionName,
+        color: project.color, // Add this line to include the project color
+      },
+    }
+    setSelectedTask(taskDetails)
+  }
+
+  // Add a handleTaskUpdate function after the handleTaskClick function
+  const handleTaskUpdate = (taskId: string, updates: Partial<TaskDetailsType>) => {
+    // Find which section contains this task
+    let taskSectionId: string | null = null
+
+    for (const section of project.sections) {
+      const taskExists = section.tasks.some((t) => t.id === taskId)
+      if (taskExists) {
+        taskSectionId = section.id
+        break
+      }
+    }
+
+    if (taskSectionId) {
+      // Extract only the properties that exist in the Task type
+      const taskUpdates: Partial<Task> = {
+        title: updates.title,
+        assignee: updates.assignee,
+        dueDate: updates.dueDate,
+        priority: updates.priority,
+        description: updates.description,
+      }
+
+      // Update the task in the project
+      updateTask(taskSectionId, taskId, taskUpdates)
+    }
+
+    // Update the selected task
+    setSelectedTask((prev) => (prev ? { ...prev, ...updates } : null))
   }
 
   const renderTaskRow = (task: Task, section: Project["sections"][0], isEditing: boolean) => {
@@ -203,7 +281,7 @@ export function ListView({
     }
 
     return (
-      <tr onClick={() => setSelectedTaskId(task.id)}>
+      <tr onClick={() => handleTaskClick(task, section.id)}>
         <td className="p-2 border-b border-[#353535] w-1/2">
           <div className="flex items-center gap-3 pl-8">
             <CheckCircle2
@@ -543,6 +621,14 @@ export function ListView({
           </div>
         )}
       </Droppable>
+      <TaskDetails
+        task={selectedTask}
+        onClose={() => {
+          setSelectedTask(null)
+          setSelectedTaskId(null)
+        }}
+        onUpdate={handleTaskUpdate}
+      />
     </DragDropContext>
   )
 }

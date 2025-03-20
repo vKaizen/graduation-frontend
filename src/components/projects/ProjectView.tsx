@@ -9,6 +9,7 @@ import { ListView } from "./list-view"
 import type { Project, Task } from "@/types"
 import { addTask, fetchProject } from "@/api-service"
 import { TaskFilters } from "./task-filters"
+import { SortMenu, type SortConfig } from "./sort-menu"
 
 export function ProjectView({ projectId, view }: Readonly<{ projectId: string; view?: string }>) {
   const [activeView, setActiveView] = useState<string>("board")
@@ -18,6 +19,7 @@ export function ProjectView({ projectId, view }: Readonly<{ projectId: string; v
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [activeFilters, setActiveFilters] = useState<string[]>([])
+  const [activeSort, setActiveSort] = useState<SortConfig | null>(null)
 
   useEffect(() => {
     setActiveView(view ?? "board")
@@ -215,14 +217,84 @@ export function ProjectView({ projectId, view }: Readonly<{ projectId: string; v
     }))
   }
 
+  // Sorting function for tasks
+  const sortTasks = (tasks: Task[], sortConfig: SortConfig | null) => {
+    if (!sortConfig) return tasks
+
+    return [...tasks].sort((a, b) => {
+      const direction = sortConfig.direction === "asc" ? 1 : -1
+
+      switch (sortConfig.option) {
+        case "title":
+          return a.title.localeCompare(b.title) * direction
+
+        case "dueDate":
+          // Handle null or undefined due dates
+          if (!a.dueDate && !b.dueDate) return 0
+          if (!a.dueDate) return 1 * direction
+          if (!b.dueDate) return -1 * direction
+          return (new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()) * direction
+
+        case "priority": {
+          // Define priority order: High > Medium > Low > null
+          const priorityOrder = { High: 3, Medium: 2, Low: 1, null: 0, undefined: 0 }
+          const aPriority = a.priority ? priorityOrder[a.priority] : 0
+          const bPriority = b.priority ? priorityOrder[b.priority] : 0
+          return (aPriority - bPriority) * direction
+        }
+
+        case "assignee":
+          // Handle null assignees
+          if (!a.assignee && !b.assignee) return 0
+          if (!a.assignee) return 1 * direction
+          if (!b.assignee) return -1 * direction
+          return a.assignee.localeCompare(b.assignee) * direction
+
+        // For dateCreated and dateUpdated, we would need these fields in the Task type
+        // For now, we'll just return the original order
+        default:
+          return 0
+      }
+    })
+  }
+
+  const handleSortChange = useCallback(
+    (sortConfig: SortConfig | null) => {
+      setActiveSort(sortConfig)
+
+      if (!originalProject || !sortConfig) {
+        // If sorting is cleared, restore the original project (with filters applied)
+        handleFilterChange(activeFilters)
+        return
+      }
+
+      // Apply sorting to each section's tasks
+      const sortedSections =
+        project?.sections.map((section) => ({
+          ...section,
+          tasks: sortTasks(section.tasks, sortConfig),
+        })) || []
+
+      setProject((prev) =>
+        prev
+          ? {
+              ...prev,
+              sections: sortedSections,
+            }
+          : null,
+      )
+    },
+    [originalProject, project, activeFilters],
+  )
+
   const handleFilterChange = useCallback(
     (filters: string[]) => {
       setActiveFilters(filters)
 
       if (!originalProject) return
 
-      if (filters.length === 0) {
-        // If no filters, restore original project data
+      if (filters.length === 0 && !activeSort) {
+        // If no filters and no sorting, restore original project data
         setProject(originalProject)
         return
       }
@@ -299,9 +371,8 @@ export function ProjectView({ projectId, view }: Readonly<{ projectId: string; v
       }
 
       // Apply filters to the original project data
-      const filteredSections = originalProject.sections.map((section) => ({
-        ...section,
-        tasks: section.tasks.filter((task) => {
+      const filteredSections = originalProject.sections.map((section) => {
+        const filteredTasks = section.tasks.filter((task) => {
           // If no filters are active, show all tasks
           if (filters.length === 0) return true
 
@@ -323,15 +394,23 @@ export function ProjectView({ projectId, view }: Readonly<{ projectId: string; v
                 return true
             }
           })
-        }),
-      }))
+        })
+
+        // Apply sorting if active
+        const sortedTasks = activeSort ? sortTasks(filteredTasks, activeSort) : filteredTasks
+
+        return {
+          ...section,
+          tasks: sortedTasks,
+        }
+      })
 
       setProject({
         ...originalProject,
         sections: filteredSections,
       })
     },
-    [originalProject],
+    [originalProject, activeSort],
   )
 
   if (loading) {
@@ -375,9 +454,7 @@ export function ProjectView({ projectId, view }: Readonly<{ projectId: string; v
         </div>
         <div className="flex items-center gap-2">
           <TaskFilters activeFilters={activeFilters} onFilterChange={handleFilterChange} />
-          <Button variant="ghost" size="sm" className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800">
-            Sort
-          </Button>
+          <SortMenu activeSort={activeSort} onSortChange={handleSortChange} />
           <Button variant="ghost" size="sm" className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800">
             Group
           </Button>

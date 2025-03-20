@@ -11,9 +11,6 @@ import { cn } from "@/lib/utils"
 import type { Task, Project, TaskDetails as TaskDetailsType } from "@/types"
 // Update the import path to correctly point to the components directory
 import { TaskDetails } from "./task-details"
-
-
-
 interface BoardViewProps {
   project: Project
   onDragEnd: (result: any) => void
@@ -123,7 +120,7 @@ export function BoardView({ project, ...otherProps }) {
     // Convert Task to TaskDetailsType with more detailed information
     const taskDetails: TaskDetailsType = {
       ...task,
-      description: task.description || "", // Use existing description if available
+      description: task.description || "",
       activities: [
         {
           type: "created",
@@ -137,23 +134,13 @@ export function BoardView({ project, ...otherProps }) {
           content: "Changed priority to " + (task.priority || "None"),
         },
       ],
-      subtasks: [
-        {
-          id: "subtask-1",
-          title: "Review requirements",
-          completed: true,
-        },
-        {
-          id: "subtask-2",
-          title: "Create initial draft",
-          completed: false,
-        },
-      ],
+      subtasks: [],
       collaborators: ["Ka", "JD"],
       project: {
         id: project.id,
         name: project.name,
         status: sectionName,
+        color: project.color, // Add this line to include the project color
       },
     }
     setSelectedTask(taskDetails)
