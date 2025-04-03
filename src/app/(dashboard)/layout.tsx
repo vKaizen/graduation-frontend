@@ -19,11 +19,10 @@ export default function DashboardLayout({
         <Header />
         <div className="flex flex-1 overflow-hidden">
           <AppSidebar />
-          <main className={cn("flex-1 overflow-y-auto p-6 bg-black", scrollbarHideClass)}>
-            {children}
-          </main>
+          <main className={cn("flex-1 overflow-y-auto", scrollbarHideClass)}>{children}</main>
         </div>
       </div>
     </SidebarProvider>
   )
 }
+

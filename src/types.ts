@@ -1,23 +1,42 @@
 export interface Task {
-  id: string;
+  _id: string;
   title: string;
   assignee: string | null;
   dueDate?: string;
   priority?: "High" | "Medium" | "Low";
   description?: string;
+  completed?: boolean;
+  subtasks?: Subtask[];
+  status: "not started" | "in progress" | "completed";
+  order: number;
+  section: string;
+  project: string;
 }
 
 export interface Section {
-  id: string;
+  _id: string;
   title: string;
   tasks: Task[];
+  project: string;
+  order: number;
 }
 
 export interface Project {
-  id: string;
+  _id: string;
   name: string;
+  description?: string;
   color: string;
-  sections: Section[];
+  roles: {
+    userId: string;
+    role: string;
+  }[];
+  sections: {
+    _id: string;
+    title: string;
+    project: string;
+    tasks: Task[];
+    order?: number;
+  }[];
 }
 
 // Add new types for task details
@@ -32,9 +51,13 @@ export interface Subtask {
   id: string;
   title: string;
   completed: boolean;
+  taskId: string;
+  assignee?: string | null;
+  dueDate?: string;
+  description?: string;
 }
 
-export interface TaskDetails extends Task {
+export interface TaskDetails extends Omit<Task, "project"> {
   description?: string;
   activities: TaskActivity[];
   subtasks: Subtask[];
@@ -43,5 +66,23 @@ export interface TaskDetails extends Task {
     id: string;
     name: string;
     status: string;
+    color?: string;
   };
+}
+
+// Only DTO needed for projects based on backend
+export interface CreateProjectDto {
+  name: string;
+  description?: string;
+  ownerId: string;
+  status?: "active" | "completed" | "archived";
+}
+
+export interface AddMemberDto {
+  userId: string;
+  role: "Owner" | "Member" | "Admin";
+}
+
+export interface UpdateProjectStatusDto {
+  status: "active" | "completed" | "archived";
 }

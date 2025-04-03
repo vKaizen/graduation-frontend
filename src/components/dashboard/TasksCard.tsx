@@ -1,11 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MoreHorizontal, Check } from "lucide-react"
+import { Check, Plus, Circle } from "lucide-react"
+import { BaseCard } from "./BaseCard"
+import { cn } from "@/lib/utils"
 
 // Sample tasks data
 const initialTasks = [
@@ -30,147 +29,114 @@ export function TasksCard() {
   const completedTasks = tasks.filter((task) => task.completed)
 
   // Toggle task completion status
-  const toggleTaskCompletion = (taskId) => {
+  const toggleTaskCompletion = (taskId: string) => {
     setTasks(tasks.map((task) => (task.id === taskId ? { ...task, completed: !task.completed } : task)))
-
-    // If we're completing a task and there are no other tasks in the current tab,
-    // switch to the appropriate tab
-    const taskToToggle = tasks.find((task) => task.id === taskId)
-    if (!taskToToggle.completed) {
-      // We're marking it as completed
-      if (upcomingTasks.length === 1 && upcomingTasks[0].id === taskId && activeTab === "upcoming") {
-        setActiveTab("completed")
-      } else if (overdueTasks.length === 1 && overdueTasks[0].id === taskId && activeTab === "overdue") {
-        setActiveTab("completed")
-      }
-    } else {
-      // We're marking it as uncompleted
-      if (completedTasks.length === 1 && completedTasks[0].id === taskId && activeTab === "completed") {
-        setActiveTab("upcoming")
-      }
-    }
   }
 
   return (
-    <Card className="bg-[#1a1a1a] border-0 shadow-md">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <div className="flex items-center space-x-3">
-          <Avatar className="h-8 w-8 bg-purple-600">
-            <AvatarImage
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-WUXcKQSumnMERmyMj9qQSP48QcRvJY.png"
-              alt="Avatar"
-            />
-            <AvatarFallback>CI</AvatarFallback>
-          </Avatar>
-          <h3 className="text-xl font-semibold text-white">My tasks</h3>
+    <BaseCard title="My tasks">
+      <div className="h-full flex flex-col">
+        {/* Simple tab buttons */}
+        <div className="flex space-x-2 mb-4 border-b border-gray-800">
+          <button
+            className={cn(
+              "px-3 py-2 text-sm font-medium",
+              activeTab === "upcoming" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white",
+            )}
+            onClick={() => setActiveTab("upcoming")}
+          >
+            Upcoming
+          </button>
+          <button
+            className={cn(
+              "px-3 py-2 text-sm font-medium",
+              activeTab === "overdue" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white",
+            )}
+            onClick={() => setActiveTab("overdue")}
+          >
+            Overdue ({overdueTasks.length})
+          </button>
+          <button
+            className={cn(
+              "px-3 py-2 text-sm font-medium",
+              activeTab === "completed" ? "text-white border-b-2 border-white" : "text-gray-400 hover:text-white",
+            )}
+            onClick={() => setActiveTab("completed")}
+          >
+            Completed
+          </button>
         </div>
-        <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-white/10">
-          <MoreHorizontal className="h-5 w-5" />
-          <span className="sr-only">More options</span>
+
+        <Button variant="ghost" className="w-full justify-start gap-3 mb-4 text-white font-medium hover:bg-white/5 p-2">
+          <div className="h-10 w-10 rounded flex items-center justify-center border-2 border-dashed border-gray-600">
+            <Plus className="h-5 w-5" />
+          </div>
+          Create task
         </Button>
-      </CardHeader>
-      <CardContent>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="bg-transparent w-full justify-start h-auto p-0 mb-4 border-b border-gray-800">
-            <TabsTrigger
-              value="upcoming"
-              className="text-gray-400 data-[state=active]:border-b-2 data-[state=active]:border-white data-[state=active]:text-white rounded-none px-4 py-2 -mb-px"
-            >
-              Upcoming
-            </TabsTrigger>
-            <TabsTrigger
-              value="overdue"
-              className="text-gray-400 data-[state=active]:border-b-2 data-[state=active]:border-white data-[state=active]:text-white rounded-none px-4 py-2 -mb-px"
-            >
-              Overdue ({overdueTasks.length})
-            </TabsTrigger>
-            <TabsTrigger
-              value="completed"
-              className="text-gray-400 data-[state=active]:border-b-2 data-[state=active]:border-white data-[state=active]:text-white rounded-none px-4 py-2 -mb-px"
-            >
-              Completed
-            </TabsTrigger>
-          </TabsList>
 
-          <TabsContent value="upcoming" className="mt-0 space-y-2">
-            {upcomingTasks.length > 0 ? (
-              upcomingTasks.map((task) => (
+        <div className="space-y-2 flex-1 overflow-y-auto">
+          {activeTab === "upcoming" &&
+            upcomingTasks.map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors"
+              >
                 <div
-                  key={task.id}
-                  className="flex items-center justify-between p-3 hover:bg-white/5 rounded-lg cursor-pointer group transition-colors"
+                  className="h-10 w-10 rounded-full flex items-center justify-center border-2 border-gray-500"
+                  onClick={() => toggleTaskCompletion(task.id)}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-5 w-5 rounded-full border-2 border-gray-500 group-hover:border-white transition-colors flex items-center justify-center cursor-pointer"
-                      onClick={() => toggleTaskCompletion(task.id)}
-                    />
-                    <span className="text-white">{task.title}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`px-2 py-1 rounded ${task.projectColor} text-xs`}>{task.project}</span>
-                    <span className="text-gray-400 text-sm">{task.dueDate}</span>
-                  </div>
+                  <Circle className="h-5 w-5 text-gray-500" />
                 </div>
-              ))
-            ) : (
-              <div className="p-4 text-gray-400">No upcoming tasks.</div>
-            )}
-          </TabsContent>
+                <span className="text-white">{task.title}</span>
+              </div>
+            ))}
 
-          <TabsContent value="overdue" className="mt-0 space-y-2">
-            {overdueTasks.length > 0 ? (
-              overdueTasks.map((task) => (
+          {activeTab === "overdue" &&
+            overdueTasks.map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors"
+              >
                 <div
-                  key={task.id}
-                  className="flex items-center justify-between p-3 hover:bg-white/5 rounded-lg cursor-pointer group transition-colors"
+                  className="h-10 w-10 rounded-full flex items-center justify-center border-2 border-red-500"
+                  onClick={() => toggleTaskCompletion(task.id)}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-5 w-5 rounded-full border-2 border-red-500 group-hover:border-red-400 transition-colors flex items-center justify-center cursor-pointer"
-                      onClick={() => toggleTaskCompletion(task.id)}
-                    />
-                    <span className="text-white">{task.title}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`px-2 py-1 rounded ${task.projectColor} text-xs`}>{task.project}</span>
-                    <span className="text-red-400 text-sm">{task.dueDate}</span>
-                  </div>
+                  <Circle className="h-5 w-5 text-red-500" />
                 </div>
-              ))
-            ) : (
-              <div className="p-4 text-gray-400">No overdue tasks.</div>
-            )}
-          </TabsContent>
+                <span className="text-white">{task.title}</span>
+              </div>
+            ))}
 
-          <TabsContent value="completed" className="mt-0 space-y-2">
-            {completedTasks.length > 0 ? (
-              completedTasks.map((task) => (
+          {activeTab === "completed" &&
+            completedTasks.map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center gap-3 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors"
+              >
                 <div
-                  key={task.id}
-                  className="flex items-center justify-between p-3 hover:bg-white/5 rounded-lg cursor-pointer group transition-colors"
+                  className="h-10 w-10 rounded-full flex items-center justify-center bg-green-500/20 border-2 border-green-500"
+                  onClick={() => toggleTaskCompletion(task.id)}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-5 w-5 rounded-full border-2 border-green-500 bg-green-500/20 transition-colors flex items-center justify-center cursor-pointer"
-                      onClick={() => toggleTaskCompletion(task.id)}
-                    >
-                      <Check className="h-3 w-3 text-green-500" />
-                    </div>
-                    <span className="text-gray-400 line-through">{task.title}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`px-2 py-1 rounded bg-gray-700 text-gray-400 text-xs`}>{task.project}</span>
-                    <span className="text-gray-500 text-sm">{task.dueDate}</span>
-                  </div>
+                  <Check className="h-5 w-5 text-green-500" />
                 </div>
-              ))
-            ) : (
-              <div className="p-4 text-gray-400">No completed tasks yet.</div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+                <span className="text-gray-400 line-through">{task.title}</span>
+              </div>
+            ))}
+
+          {activeTab === "upcoming" && upcomingTasks.length === 0 && (
+            <div className="p-4 text-gray-400">No upcoming tasks.</div>
+          )}
+
+          {activeTab === "overdue" && overdueTasks.length === 0 && (
+            <div className="p-4 text-gray-400">No overdue tasks.</div>
+          )}
+
+          {activeTab === "completed" && completedTasks.length === 0 && (
+            <div className="p-4 text-gray-400">No completed tasks yet.</div>
+          )}
+        </div>
+      </div>
+    </BaseCard>
   )
 }
 

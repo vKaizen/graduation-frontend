@@ -1,12 +1,17 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
+import { useState } from "react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   Calendar,
   Link,
@@ -25,91 +30,109 @@ import {
   ArrowRight,
   GripVertical,
   ChevronLeft,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import type { TaskDetails as TaskDetailsType, Subtask } from "@/types"
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
+  Trash2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { TaskDetails as TaskDetailsType, Subtask } from "@/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
 interface TaskActivity {
-  type: "commented" | "created" | "completed"
-  user: string
-  timestamp: string
-  content?: string
+  type: "commented" | "created" | "completed";
+  user: string;
+  timestamp: string;
+  content?: string;
 }
 
 interface TaskDetailsProps {
-  task: TaskDetailsType | null
-  onClose: () => void
-  onUpdate: (taskId: string, updates: Partial<TaskDetailsType>) => void
+  task: TaskDetailsType | null;
+  onClose: () => void;
+  onUpdate: (taskId: string, updates: Partial<TaskDetailsType>) => void;
+  onDelete: () => void;
 }
 
-export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [editedTitle, setEditedTitle] = useState(task?.title || "")
-  const [newComment, setNewComment] = useState("")
-  const [activeTab, setActiveTab] = useState<"comments" | "activity">("comments")
-  const [newSubtask, setNewSubtask] = useState("")
-  const [isAddingSubtask, setIsAddingSubtask] = useState(false)
-  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null)
-  const [editedSubtaskTitle, setEditedSubtaskTitle] = useState("")
-  const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null)
-  const [subtaskDescription, setSubtaskDescription] = useState("")
+export function TaskDetails({
+  task,
+  onClose,
+  onUpdate,
+  onDelete,
+}: TaskDetailsProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(task?.title || "");
+  const [newComment, setNewComment] = useState("");
+  const [activeTab, setActiveTab] = useState<"comments" | "activity">(
+    "comments"
+  );
+  const [newSubtask, setNewSubtask] = useState("");
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [editedSubtaskTitle, setEditedSubtaskTitle] = useState("");
+  const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null);
+  const [subtaskDescription, setSubtaskDescription] = useState("");
 
   // Update the subtask creation and editing interfaces to include assignee and due date fields
-  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(null)
-  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState<string>("")
-  const [editedSubtaskAssignee, setEditedSubtaskAssignee] = useState<string | null>(null)
-  const [editedSubtaskDueDate, setEditedSubtaskDueDate] = useState<string>("")
+  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(
+    null
+  );
+  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState<string>("");
+  const [editedSubtaskAssignee, setEditedSubtaskAssignee] = useState<
+    string | null
+  >(null);
+  const [editedSubtaskDueDate, setEditedSubtaskDueDate] = useState<string>("");
 
   // Replace the getProjectColor function with this more robust version
   const getProjectColor = (colorClass?: string) => {
-    if (!colorClass) return "#22d3ee" // Default cyan color
+    if (!colorClass) return "#22d3ee"; // Default cyan color
 
     // Handle custom hex colors in the format bg-[#fd3939]
     if (colorClass.includes("[#") && colorClass.includes("]")) {
-      const hexMatch = colorClass.match(/\[#([A-Fa-f0-9]{3,8})\]/)
+      const hexMatch = colorClass.match(/\[#([A-Fa-f0-9]{3,8})\]/);
       if (hexMatch && hexMatch[1]) {
-        return `#${hexMatch[1]}`
+        return `#${hexMatch[1]}`;
       }
     }
 
     // For standard Tailwind classes like bg-purple-500,
     // we'll apply the class directly to a small element
-    return colorClass
-  }
+    return colorClass;
+  };
 
-  if (!task) return null
+  if (!task) return null;
 
   const handleTitleSave = () => {
-    if (editedTitle.trim() === "") return // Don't save empty titles
+    if (editedTitle.trim() === "") return; // Don't save empty titles
     onUpdate(task.id, {
       ...task, // Preserve all existing task data
       title: editedTitle.trim(),
-    })
-    setIsEditing(false)
-  }
+    });
+    setIsEditing(false);
+  };
 
   const handleAddComment = () => {
-    if (!newComment.trim()) return
+    if (!newComment.trim()) return;
 
     const newActivity: TaskActivity = {
       type: "commented",
       user: "Ka",
       timestamp: "Just now",
       content: newComment,
-    }
+    };
 
     onUpdate(task.id, {
       ...task,
       activities: [...task.activities, newActivity],
-    })
-    setNewComment("")
-  }
+    });
+    setNewComment("");
+  };
 
   // Update the handleAddSubtask function to include assignee and due date
   const handleAddSubtask = () => {
-    if (!newSubtask.trim()) return
+    if (!newSubtask.trim()) return;
 
     const newSubtaskItem = {
       id: `subtask-${Date.now()}`,
@@ -118,35 +141,35 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
       assignee: newSubtaskAssignee,
       dueDate: newSubtaskDueDate,
       description: "",
-    }
+    };
 
     // Update the task with the new subtask while preserving all existing task data
     onUpdate(task.id, {
       ...task, // Preserve all existing task data
       subtasks: [...task.subtasks, newSubtaskItem],
-    })
-    setNewSubtask("")
-    setNewSubtaskAssignee(null)
-    setNewSubtaskDueDate("")
-    setIsAddingSubtask(false)
-  }
+    });
+    setNewSubtask("");
+    setNewSubtaskAssignee(null);
+    setNewSubtaskDueDate("");
+    setIsAddingSubtask(false);
+  };
 
   // Update the handleEditSubtask function to set the assignee and due date
   const handleEditSubtask = (subtaskId: string) => {
-    const subtask = task.subtasks.find((st) => st.id === subtaskId)
+    const subtask = task.subtasks.find((st) => st.id === subtaskId);
     if (subtask) {
-      setEditingSubtaskId(subtaskId)
-      setEditedSubtaskTitle(subtask.title)
-      setEditedSubtaskAssignee(subtask.assignee || null)
-      setEditedSubtaskDueDate(subtask.dueDate || "")
+      setEditingSubtaskId(subtaskId);
+      setEditedSubtaskTitle(subtask.title);
+      setEditedSubtaskAssignee(subtask.assignee || null);
+      setEditedSubtaskDueDate(subtask.dueDate || "");
     }
-  }
+  };
 
   // Update the handleSaveSubtaskEdit function to include assignee and due date
   const handleSaveSubtaskEdit = () => {
     if (!editingSubtaskId || !editedSubtaskTitle.trim()) {
-      setEditingSubtaskId(null)
-      return
+      setEditingSubtaskId(null);
+      return;
     }
 
     onUpdate(task.id, {
@@ -159,56 +182,58 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
               assignee: editedSubtaskAssignee,
               dueDate: editedSubtaskDueDate,
             }
-          : st,
+          : st
       ),
-    })
-    setEditingSubtaskId(null)
-  }
+    });
+    setEditingSubtaskId(null);
+  };
 
   const handleDeleteSubtask = (subtaskId: string) => {
     onUpdate(task.id, {
       ...task,
       subtasks: task.subtasks.filter((st) => st.id !== subtaskId),
-    })
-  }
+    });
+  };
 
   const handleToggleSubtask = (subtaskId: string) => {
     onUpdate(task.id, {
       ...task,
-      subtasks: task.subtasks.map((st) => (st.id === subtaskId ? { ...st, completed: !st.completed } : st)),
-    })
-  }
+      subtasks: task.subtasks.map((st) =>
+        st.id === subtaskId ? { ...st, completed: !st.completed } : st
+      ),
+    });
+  };
 
   // Handle drag end for subtasks reordering
   const handleSubtaskDragEnd = (result: any) => {
-    const { destination, source } = result
+    const { destination, source } = result;
 
     // If dropped outside the list or at the same position
     if (!destination || destination.index === source.index) {
-      return
+      return;
     }
 
     // Reorder the subtasks array
-    const newSubtasks = Array.from(task.subtasks)
-    const [removed] = newSubtasks.splice(source.index, 1)
-    newSubtasks.splice(destination.index, 0, removed)
+    const newSubtasks = Array.from(task.subtasks);
+    const [removed] = newSubtasks.splice(source.index, 1);
+    newSubtasks.splice(destination.index, 0, removed);
 
     // Update the task with the new subtasks order
     onUpdate(task.id, {
       ...task,
       subtasks: newSubtasks,
-    })
-  }
+    });
+  };
 
   // Open subtask details
   const handleOpenSubtaskDetails = (subtask: Subtask) => {
-    setSelectedSubtask(subtask)
-    setSubtaskDescription(subtask.description || "")
-  }
+    setSelectedSubtask(subtask);
+    setSubtaskDescription(subtask.description || "");
+  };
 
   // Update subtask details
   const handleUpdateSubtaskDetails = () => {
-    if (!selectedSubtask) return
+    if (!selectedSubtask) return;
 
     onUpdate(task.id, {
       ...task,
@@ -218,23 +243,26 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
               ...st,
               description: subtaskDescription,
             }
-          : st,
+          : st
       ),
-    })
-  }
+    });
+  };
 
   // Format date for display
   const formatDate = (dateString: string) => {
-    if (!dateString) return ""
+    if (!dateString) return "";
 
     try {
-      const date = new Date(dateString)
-      if (isNaN(date.getTime())) return dateString
-      return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
     } catch (e) {
-      return dateString
+      return dateString;
     }
-  }
+  };
 
   // Custom styles for the date input with more direct styling
   const dateInputStyle = {
@@ -248,15 +276,15 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
     outline: "none",
     width: "100%",
     height: "100%",
-  }
+  };
 
   // Add this CSS class for the date picker wrapper
   const datePickerWrapperClass =
-    "relative inline-block h-7 w-7 rounded overflow-hidden hover:bg-[#454545] transition-colors"
+    "relative inline-block h-7 w-7 rounded overflow-hidden hover:bg-[#454545] transition-colors";
 
   // Add this CSS class for the date input itself
   const dateInputClass =
-    "absolute inset-0 opacity-0 cursor-pointer z-10 focus:opacity-100 focus:z-20 focus:bg-[#353535] focus:border-2 focus:border-blue-500"
+    "absolute inset-0 opacity-0 cursor-pointer z-10 focus:opacity-100 focus:z-20 focus:bg-[#353535] focus:border-2 focus:border-blue-500";
 
   return (
     <>
@@ -272,55 +300,34 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
               <div className="sr-only">
                 <SheetTitle>{task.title}</SheetTitle>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-neutral-200 border-neutral-700 hover:bg-neutral-800 hover:text-neutral-100 h-8"
-                onClick={() => {
-                  onUpdate(task.id, {
-                    ...task,
-                    completed: !task.completed,
-                  })
-                }}
-              >
-                <Check className="h-4 w-4 mr-2" />
-                {task.completed ? "Mark incomplete" : "Mark complete"}
-              </Button>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800 h-8 w-8"
+                  variant="outline"
+                  size="sm"
+                  className="text-neutral-200 border-neutral-700 hover:bg-neutral-800 hover:text-neutral-100 h-8"
+                  onClick={() => {
+                    onUpdate(task.id, {
+                      ...task,
+                      completed: !task.completed,
+                    });
+                  }}
                 >
-                  <ThumbsUp className="h-4 w-4" />
+                  <Check className="h-4 w-4 mr-2" />
+                  {task.completed ? "Mark incomplete" : "Mark complete"}
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800 h-8 w-8"
+                  size="sm"
+                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8"
+                  onClick={() => {
+                    if (confirm("Are you sure you want to delete this task?")) {
+                      onDelete();
+                      onClose();
+                    }
+                  }}
                 >
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800 h-8 w-8"
-                >
-                  <Link className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800 h-8 w-8"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800 h-8 w-8"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
                 </Button>
               </div>
             </SheetHeader>
@@ -337,13 +344,13 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
-                          e.preventDefault()
-                          handleTitleSave()
+                          e.preventDefault();
+                          handleTitleSave();
                         }
                         if (e.key === "Escape") {
-                          e.preventDefault()
-                          setEditedTitle(task.title)
-                          setIsEditing(false)
+                          e.preventDefault();
+                          setEditedTitle(task.title);
+                          setIsEditing(false);
                         }
                       }}
                     />
@@ -354,8 +361,8 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        setEditedTitle(task.title)
-                        setIsEditing(false)
+                        setEditedTitle(task.title);
+                        setIsEditing(false);
                       }}
                     >
                       Cancel
@@ -365,8 +372,8 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                   <div
                     className="group cursor-pointer inline-block"
                     onClick={() => {
-                      setEditedTitle(task.title) // Set current title when starting to edit
-                      setIsEditing(true)
+                      setEditedTitle(task.title); // Set current title when starting to edit
+                      setIsEditing(true);
                     }}
                   >
                     <h2 className="text-2xl font-semibold text-white group-hover:text-neutral-300 transition-colors">
@@ -383,9 +390,13 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6 bg-amber-500">
-                        <AvatarFallback className="text-xs">{task.assignee?.substring(0, 2) || "Ka"}</AvatarFallback>
+                        <AvatarFallback className="text-xs">
+                          {task.assignee?.substring(0, 2) || "Ka"}
+                        </AvatarFallback>
                       </Avatar>
-                      <span className="text-neutral-200">{task.assignee || "Kaizen"}</span>
+                      <span className="text-neutral-200">
+                        {task.assignee || "Kaizen"}
+                      </span>
                     </div>
                     <Button
                       variant="ghost"
@@ -414,7 +425,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                           <Calendar className="h-4 w-4" />
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-neutral-200">{task.dueDate || "Today - Mar 18"}</span>
+                      <span className="text-neutral-200">
+                        {task.dueDate || "Today - Mar 18"}
+                      </span>
                     </div>
                     <Button
                       variant="ghost"
@@ -436,19 +449,28 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                         <span
                           className="w-2 h-2 rounded-full"
                           style={{
-                            backgroundColor: getProjectColor(task.project.color),
+                            backgroundColor: getProjectColor(
+                              task.project.color
+                            ),
                           }}
                         />
                       ) : (
                         // For standard Tailwind classes like bg-purple-500
-                        <span className={`w-2 h-2 rounded-full ${task.project.color}`} />
+                        <span
+                          className={`w-2 h-2 rounded-full ${task.project.color}`}
+                        />
                       )
                     ) : (
                       // Default fallback
                       <span className="w-2 h-2 rounded-full bg-cyan-500" />
                     )}
-                    <span className="text-sm text-neutral-200">{task.project?.name || "Task management project"}</span>
-                    <Badge variant="secondary" className="bg-[#2a2a2a] text-neutral-200">
+                    <span className="text-sm text-neutral-200">
+                      {task.project?.name || "Task management project"}
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      className="bg-[#2a2a2a] text-neutral-200"
+                    >
                       {task.project?.status || "Doing"}
                     </Badge>
                   </div>
@@ -471,7 +493,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                 {/* Dependencies */}
                 <div className="space-y-2 bg-[#222] rounded-lg p-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm text-neutral-400">Dependencies</label>
+                    <label className="text-sm text-neutral-400">
+                      Dependencies
+                    </label>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -481,7 +505,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                       Add dependency
                     </Button>
                   </div>
-                  <div className="text-sm text-neutral-500 italic">No dependencies added yet</div>
+                  <div className="text-sm text-neutral-500 italic">
+                    No dependencies added yet
+                  </div>
                 </div>
 
                 {/* Fields */}
@@ -491,15 +517,17 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                     <div className="flex items-center justify-between px-3 py-2 hover:bg-[#2a2a2a]">
                       <div className="flex items-center gap-2">
                         <ChevronRight className="h-4 w-4 text-neutral-500" />
-                        <span className="text-sm text-neutral-400">Priority</span>
+                        <span className="text-sm text-neutral-400">
+                          Priority
+                        </span>
                       </div>
                       <Badge
                         className={cn(
                           task.priority === "High"
                             ? "bg-red-500/20 text-red-300 hover:bg-red-500/30"
                             : task.priority === "Medium"
-                              ? "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
-                              : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30",
+                            ? "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+                            : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
                         )}
                       >
                         {task.priority || "Low"}
@@ -519,7 +547,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
 
                 {/* Description */}
                 <div className="space-y-2">
-                  <label className="text-sm text-neutral-400">Description</label>
+                  <label className="text-sm text-neutral-400">
+                    Description
+                  </label>
                   <Textarea
                     placeholder="What is this task about?"
                     className="bg-[#353535] border-0 resize-none min-h-[120px] text-neutral-200 text-base"
@@ -541,7 +571,11 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                     <DragDropContext onDragEnd={handleSubtaskDragEnd}>
                       <Droppable droppableId="subtasks">
                         {(provided) => (
-                          <div {...provided.droppableProps} ref={provided.innerRef} className="subtasks-list">
+                          <div
+                            {...provided.droppableProps}
+                            ref={provided.innerRef}
+                            className="subtasks-list"
+                          >
                             {task.subtasks.map((subtask, index) => (
                               <Draggable
                                 key={subtask.id}
@@ -555,8 +589,10 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                                     {...provided.draggableProps}
                                     className={cn(
                                       "flex items-center justify-between py-2 px-3 border-b border-[#333] group",
-                                      editingSubtaskId === subtask.id && "bg-[#111827]",
-                                      snapshot.isDragging && "bg-[#2a2a2a] opacity-90",
+                                      editingSubtaskId === subtask.id &&
+                                        "bg-[#111827]",
+                                      snapshot.isDragging &&
+                                        "bg-[#2a2a2a] opacity-90"
                                     )}
                                   >
                                     {editingSubtaskId === subtask.id ? (
@@ -564,50 +600,75 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                                         <Input
                                           autoFocus
                                           value={editedSubtaskTitle}
-                                          onChange={(e) => setEditedSubtaskTitle(e.target.value)}
+                                          onChange={(e) =>
+                                            setEditedSubtaskTitle(
+                                              e.target.value
+                                            )
+                                          }
                                           className="bg-transparent border-0 text-white h-8 focus-visible:ring-0 p-0"
                                           onKeyDown={(e) => {
                                             if (e.key === "Enter") {
-                                              e.preventDefault()
-                                              handleSaveSubtaskEdit()
+                                              e.preventDefault();
+                                              handleSaveSubtaskEdit();
                                             }
                                             if (e.key === "Escape") {
-                                              e.preventDefault()
-                                              setEditingSubtaskId(null)
+                                              e.preventDefault();
+                                              setEditingSubtaskId(null);
                                             }
                                           }}
                                         />
                                         <div className="flex items-center gap-1">
                                           <Select
-                                            value={editedSubtaskAssignee || "UNASSIGNED"}
+                                            value={
+                                              editedSubtaskAssignee ||
+                                              "UNASSIGNED"
+                                            }
                                             onValueChange={(value) =>
-                                              setEditedSubtaskAssignee(value === "UNASSIGNED" ? null : value)
+                                              setEditedSubtaskAssignee(
+                                                value === "UNASSIGNED"
+                                                  ? null
+                                                  : value
+                                              )
                                             }
                                           >
                                             <SelectTrigger className="h-7 w-7 px-0 border-0 bg-transparent hover:bg-[#353535] hover:text-neutral-300">
                                               <User2
                                                 className={cn(
                                                   "h-4 w-4",
-                                                  editedSubtaskAssignee ? "text-violet-500" : "text-neutral-400",
+                                                  editedSubtaskAssignee
+                                                    ? "text-violet-500"
+                                                    : "text-neutral-400"
                                                 )}
                                               />
                                             </SelectTrigger>
                                             <SelectContent className="bg-[#353535] border-[#1a1a1a] text-white">
-                                              <SelectItem value="CX">CX</SelectItem>
-                                              <SelectItem value="JD">JD</SelectItem>
-                                              <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
+                                              <SelectItem value="CX">
+                                                CX
+                                              </SelectItem>
+                                              <SelectItem value="JD">
+                                                JD
+                                              </SelectItem>
+                                              <SelectItem value="UNASSIGNED">
+                                                Unassigned
+                                              </SelectItem>
                                             </SelectContent>
                                           </Select>
 
                                           {/* Updated date input styling */}
-                                          <div className={datePickerWrapperClass}>
+                                          <div
+                                            className={datePickerWrapperClass}
+                                          >
                                             <div className="flex items-center justify-center h-full w-full text-sm text-white">
                                               <Calendar className="h-4 w-4 text-neutral-400" />
                                             </div>
                                             <input
                                               type="date"
                                               value={editedSubtaskDueDate}
-                                              onChange={(e) => setEditedSubtaskDueDate(e.target.value)}
+                                              onChange={(e) =>
+                                                setEditedSubtaskDueDate(
+                                                  e.target.value
+                                                )
+                                              }
                                               className={dateInputClass}
                                               style={dateInputStyle}
                                             />
@@ -617,7 +678,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                                             variant="ghost"
                                             size="icon"
                                             className="h-7 w-7 text-neutral-400 hover:text-neutral-300"
-                                            onClick={() => handleSaveSubtaskEdit()}
+                                            onClick={() =>
+                                              handleSaveSubtaskEdit()
+                                            }
                                           >
                                             <Check className="h-3.5 w-3.5" />
                                           </Button>
@@ -625,7 +688,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                                             variant="ghost"
                                             size="icon"
                                             className="h-7 w-7 text-neutral-400 hover:text-neutral-300"
-                                            onClick={() => setEditingSubtaskId(null)}
+                                            onClick={() =>
+                                              setEditingSubtaskId(null)
+                                            }
                                           >
                                             <X className="h-3.5 w-3.5" />
                                           </Button>
@@ -642,14 +707,20 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                                           </div>
                                           <button
                                             className="flex items-center justify-center w-5 h-5 rounded-full border border-neutral-600 text-neutral-400 hover:border-neutral-400 hover:text-neutral-300"
-                                            onClick={() => handleToggleSubtask(subtask.id)}
+                                            onClick={() =>
+                                              handleToggleSubtask(subtask.id)
+                                            }
                                           >
-                                            {subtask.completed && <Check className="h-3 w-3" />}
+                                            {subtask.completed && (
+                                              <Check className="h-3 w-3" />
+                                            )}
                                           </button>
                                           <span
                                             className={cn(
                                               "text-sm",
-                                              subtask.completed ? "text-neutral-500 line-through" : "text-neutral-200",
+                                              subtask.completed
+                                                ? "text-neutral-500 line-through"
+                                                : "text-neutral-200"
                                             )}
                                           >
                                             {subtask.title}
@@ -670,7 +741,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                                             variant="ghost"
                                             size="icon"
                                             className="h-7 w-7 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-300"
-                                            onClick={() => handleOpenSubtaskDetails(subtask)}
+                                            onClick={() =>
+                                              handleOpenSubtaskDetails(subtask)
+                                            }
                                           >
                                             <ArrowRight className="h-3.5 w-3.5" />
                                           </Button>
@@ -678,7 +751,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                                             variant="ghost"
                                             size="icon"
                                             className="h-7 w-7 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-300"
-                                            onClick={() => handleEditSubtask(subtask.id)}
+                                            onClick={() =>
+                                              handleEditSubtask(subtask.id)
+                                            }
                                           >
                                             <Pencil className="h-3.5 w-3.5" />
                                           </Button>
@@ -686,7 +761,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                                             variant="ghost"
                                             size="icon"
                                             className="h-7 w-7 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-300"
-                                            onClick={() => handleDeleteSubtask(subtask.id)}
+                                            onClick={() =>
+                                              handleDeleteSubtask(subtask.id)
+                                            }
                                           >
                                             <X className="h-3.5 w-3.5" />
                                           </Button>
@@ -718,25 +795,36 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                             placeholder="Add a subtask"
                             className="bg-transparent border-0 text-white h-8 focus-visible:ring-0 p-0"
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") handleAddSubtask()
-                              if (e.key === "Escape") setIsAddingSubtask(false)
+                              if (e.key === "Enter") handleAddSubtask();
+                              if (e.key === "Escape") setIsAddingSubtask(false);
                             }}
                           />
                         </div>
                         <div className="flex items-center gap-1">
                           <Select
                             value={newSubtaskAssignee || "UNASSIGNED"}
-                            onValueChange={(value) => setNewSubtaskAssignee(value === "UNASSIGNED" ? null : value)}
+                            onValueChange={(value) =>
+                              setNewSubtaskAssignee(
+                                value === "UNASSIGNED" ? null : value
+                              )
+                            }
                           >
                             <SelectTrigger className="h-7 w-7 px-0 border-0 bg-transparent hover:bg-[#2d3748] hover:text-neutral-300">
                               <User2
-                                className={cn("h-4 w-4", newSubtaskAssignee ? "text-violet-500" : "text-neutral-400")}
+                                className={cn(
+                                  "h-4 w-4",
+                                  newSubtaskAssignee
+                                    ? "text-violet-500"
+                                    : "text-neutral-400"
+                                )}
                               />
                             </SelectTrigger>
                             <SelectContent className="bg-[#353535] border-[#1a1a1a] text-white">
                               <SelectItem value="CX">CX</SelectItem>
                               <SelectItem value="JD">JD</SelectItem>
-                              <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
+                              <SelectItem value="UNASSIGNED">
+                                Unassigned
+                              </SelectItem>
                             </SelectContent>
                           </Select>
 
@@ -748,7 +836,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                             <input
                               type="date"
                               value={newSubtaskDueDate}
-                              onChange={(e) => setNewSubtaskDueDate(e.target.value)}
+                              onChange={(e) =>
+                                setNewSubtaskDueDate(e.target.value)
+                              }
                               className={dateInputClass}
                               style={dateInputStyle}
                             />
@@ -776,7 +866,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
 
                     {/* Empty State */}
                     {task.subtasks.length === 0 && !isAddingSubtask && (
-                      <div className="py-3 px-4 text-sm text-neutral-500 italic">No subtasks added yet</div>
+                      <div className="py-3 px-4 text-sm text-neutral-500 italic">
+                        No subtasks added yet
+                      </div>
                     )}
                   </div>
 
@@ -812,7 +904,7 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                       "flex-1 rounded-none text-sm font-medium",
                       activeTab === "comments"
                         ? "text-white border-b-2 border-[#353535] hover:bg-[#353535] hover:text-white"
-                        : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800",
+                        : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
                     )}
                     onClick={() => setActiveTab("comments")}
                   >
@@ -824,7 +916,7 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                       "flex-1 rounded-none text-sm font-medium",
                       activeTab === "activity"
                         ? "text-white border-b-2 border-[#353535] hover:bg-[#353535] hover:text-white"
-                        : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800",
+                        : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
                     )}
                     onClick={() => setActiveTab("activity")}
                   >
@@ -834,25 +926,39 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
 
                 <div className="p-4 space-y-4">
                   {task.activities
-                    .filter((activity) => activeTab === "activity" || activity.type === "commented")
+                    .filter(
+                      (activity) =>
+                        activeTab === "activity" ||
+                        activity.type === "commented"
+                    )
                     .map((activity, index) => (
                       <div key={index} className="flex items-start gap-3 group">
                         <Avatar className="h-6 w-6 bg-amber-500">
-                          <AvatarFallback className="text-xs">Ka</AvatarFallback>
+                          <AvatarFallback className="text-xs">
+                            Ka
+                          </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-neutral-200">Kaizen</span>
+                            <span className="text-sm font-medium text-neutral-200">
+                              Kaizen
+                            </span>
                             <span className="text-xs text-neutral-500">
                               {activity.type === "commented"
                                 ? "commented"
                                 : activity.type === "created"
-                                  ? "created this task"
-                                  : "completed this task"}
+                                ? "created this task"
+                                : "completed this task"}
                             </span>
-                            <span className="text-xs text-neutral-500">{activity.timestamp}</span>
+                            <span className="text-xs text-neutral-500">
+                              {activity.timestamp}
+                            </span>
                           </div>
-                          {activity.content && <p className="mt-1 text-sm text-neutral-300">{activity.content}</p>}
+                          {activity.content && (
+                            <p className="mt-1 text-sm text-neutral-300">
+                              {activity.content}
+                            </p>
+                          )}
                         </div>
                         {activity.type === "commented" && (
                           <Button
@@ -905,7 +1011,10 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                   </Avatar>
                 </div>
               </div>
-              <Button variant="ghost" className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800">
+              <Button
+                variant="ghost"
+                className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
+              >
                 <Bell className="h-4 w-4 mr-2" />
                 Leave task
               </Button>
@@ -915,7 +1024,10 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
       </Sheet>
 
       {/* Subtask Details Sheet */}
-      <Sheet open={!!selectedSubtask} onOpenChange={() => setSelectedSubtask(null)}>
+      <Sheet
+        open={!!selectedSubtask}
+        onOpenChange={() => setSelectedSubtask(null)}
+      >
         <SheetContent
           side="right"
           style={{ width: "800px", maxWidth: "90vw" }}
@@ -935,7 +1047,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                     <ChevronLeft className="h-4 w-4 mr-2" />
                     Back
                   </Button>
-                  <SheetTitle className="sr-only">{selectedSubtask.title}</SheetTitle>
+                  <SheetTitle className="sr-only">
+                    {selectedSubtask.title}
+                  </SheetTitle>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button
@@ -946,17 +1060,21 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                       onUpdate(task.id, {
                         ...task,
                         subtasks: task.subtasks.map((st) =>
-                          st.id === selectedSubtask.id ? { ...st, completed: !selectedSubtask.completed } : st,
+                          st.id === selectedSubtask.id
+                            ? { ...st, completed: !selectedSubtask.completed }
+                            : st
                         ),
-                      })
+                      });
                       setSelectedSubtask({
                         ...selectedSubtask,
                         completed: !selectedSubtask.completed,
-                      })
+                      });
                     }}
                   >
                     <Check className="h-4 w-4 mr-2" />
-                    {selectedSubtask.completed ? "Mark incomplete" : "Mark complete"}
+                    {selectedSubtask.completed
+                      ? "Mark incomplete"
+                      : "Mark complete"}
                   </Button>
                   <Button
                     variant="ghost"
@@ -972,7 +1090,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                 {/* Breadcrumb */}
                 <div className="px-6 pt-4 pb-2">
                   <div className="flex items-center text-sm text-neutral-400">
-                    <span>{task.project?.name || "Task management project"}</span>
+                    <span>
+                      {task.project?.name || "Task management project"}
+                    </span>
                     <ChevronRight className="h-4 w-4 mx-1" />
                     <span className="text-neutral-300">{task.title}</span>
                   </div>
@@ -980,7 +1100,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
 
                 {/* Subtask Title */}
                 <div className="px-6 pt-2 pb-4">
-                  <h2 className="text-2xl font-semibold text-white">{selectedSubtask.title}</h2>
+                  <h2 className="text-2xl font-semibold text-white">
+                    {selectedSubtask.title}
+                  </h2>
                 </div>
 
                 <div className="px-6 space-y-6">
@@ -994,7 +1116,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                             {selectedSubtask.assignee?.substring(0, 2) || "Ka"}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-neutral-200">{selectedSubtask.assignee || "Kaizen"}</span>
+                        <span className="text-neutral-200">
+                          {selectedSubtask.assignee || "Kaizen"}
+                        </span>
                       </div>
                       <Button
                         variant="ghost"
@@ -1024,7 +1148,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-neutral-200">
-                          {selectedSubtask.dueDate ? formatDate(selectedSubtask.dueDate) : "Mar 6"}
+                          {selectedSubtask.dueDate
+                            ? formatDate(selectedSubtask.dueDate)
+                            : "Mar 6"}
                         </span>
                       </div>
                       <Button
@@ -1039,7 +1165,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
 
                   {/* Dependencies */}
                   <div className="space-y-2">
-                    <label className="text-sm text-neutral-400">Dependencies</label>
+                    <label className="text-sm text-neutral-400">
+                      Dependencies
+                    </label>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1061,17 +1189,19 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
 
                   {/* Description */}
                   <div className="space-y-2">
-                    <label className="text-sm text-neutral-400">Description</label>
+                    <label className="text-sm text-neutral-400">
+                      Description
+                    </label>
                     <Textarea
                       placeholder="What is this task about?"
                       className="bg-[#353535] border-0 resize-none min-h-[120px] text-neutral-200 text-base"
                       value={subtaskDescription}
                       onChange={(e) => {
-                        setSubtaskDescription(e.target.value)
+                        setSubtaskDescription(e.target.value);
                         // Auto-save after a short delay
                         setTimeout(() => {
-                          handleUpdateSubtaskDetails()
-                        }, 500)
+                          handleUpdateSubtaskDetails();
+                        }, 500);
                       }}
                     />
                   </div>
@@ -1081,7 +1211,9 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
               {/* Footer */}
               <div className="p-4 border-t border-[#222] flex items-center justify-between bg-[#1a1a1a]">
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-neutral-400">Collaborators</span>
+                  <span className="text-sm text-neutral-400">
+                    Collaborators
+                  </span>
                   <div className="flex -space-x-2">
                     <Avatar className="h-6 w-6 border-2 border-[#1a1a1a] bg-amber-500">
                       <AvatarFallback className="text-xs">Ka</AvatarFallback>
@@ -1095,7 +1227,10 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
                     </Button>
                   </div>
                 </div>
-                <Button variant="ghost" className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800">
+                <Button
+                  variant="ghost"
+                  className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
+                >
                   <Bell className="h-4 w-4 mr-2" />
                   Leave task
                 </Button>
@@ -1105,6 +1240,5 @@ export function TaskDetails({ task, onClose, onUpdate }: TaskDetailsProps) {
         </SheetContent>
       </Sheet>
     </>
-  )
+  );
 }
-

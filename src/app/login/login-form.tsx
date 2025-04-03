@@ -38,7 +38,7 @@ export default function ModernLogin() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3000/users/login", {
+      const response = await fetch("http://localhost:3000/api/users/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -52,15 +52,26 @@ export default function ModernLogin() {
 
       const data = await response.json();
       console.log("Login successful", data);
+
+      // Store the token in localStorage
+      localStorage.setItem("accessToken", data.accessToken);
+
+      // Extract userId from JWT token
+      const tokenParts = data.accessToken.split(".");
+      if (tokenParts.length === 3) {
+        const payload = JSON.parse(atob(tokenParts[1]));
+        localStorage.setItem("userId", payload.sub || payload.id);
+      }
+
       router.push("/home");
-    } catch (err) {
+    } catch (_err) {
       setError("Invalid email or password");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSignup = async (e) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
@@ -73,7 +84,7 @@ export default function ModernLogin() {
     }
 
     try {
-      const response = await fetch("http://localhost:3000/users/register", {
+      const response = await fetch("http://localhost:3000/api/users/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -95,8 +106,12 @@ export default function ModernLogin() {
 
       console.log("Signup successful", data);
       router.push("/home");
-    } catch (error) {
-      setError(error.message || "An error occurred during registration.");
+    } catch (error: unknown) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "An error occurred during registration."
+      );
     } finally {
       setIsLoading(false);
     }

@@ -24,7 +24,8 @@ export function ProjectHeader({ project }: { project: Project | null }) {
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <div
-            className={`w-8 h-8 ${project.color} rounded flex items-center justify-center`}
+            className="w-8 h-8 rounded flex items-center justify-center"
+            style={{ backgroundColor: project.color }}
           >
             <span className="text-white font-medium">{project.name[0]}</span>
           </div>
