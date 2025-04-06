@@ -74,8 +74,9 @@ export interface TaskDetails extends Omit<Task, "project"> {
 export interface CreateProjectDto {
   name: string;
   description?: string;
-  ownerId: string;
-  status?: "active" | "completed" | "archived";
+  ownerId?: string;
+  color: string;
+  status: string;
 }
 
 export interface AddMemberDto {

@@ -5,12 +5,53 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SidebarNavItem } from "./sidebar-nav-item";
-import { Home, Inbox, Info, Mail, Plus, Users } from "lucide-react";
+import {
+  Home,
+  Inbox,
+  Info,
+  Mail,
+  Plus,
+  Users,
+  Rocket,
+  Star,
+  UserCircle,
+} from "lucide-react";
 import { getProjectIds, fetchProject } from "@/api-service"; // Import API functions
 
 const scrollbarHideClass = `
   scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]
 `;
+
+function EmptyProjectsState() {
+  return (
+    <div className="px-4 py-6">
+      <div className="rounded-lg bg-[#252525] p-4">
+        <div className="flex justify-center space-x-2 mb-4">
+          <div className="p-2 bg-blue-500/20 rounded-lg">
+            <UserCircle className="h-5 w-5 text-blue-500" />
+          </div>
+          <div className="p-2 bg-purple-500/20 rounded-lg">
+            <Rocket className="h-5 w-5 text-purple-500" />
+          </div>
+          <div className="p-2 bg-green-500/20 rounded-lg">
+            <Star className="h-5 w-5 text-green-500" />
+          </div>
+        </div>
+        <h3 className="text-sm text-center text-gray-200 font-medium mb-2">
+          Organize and plan your work with projects
+        </h3>
+        <Link href="/projects/new" className="block">
+          <Button
+            variant="secondary"
+            className="w-full bg-[#353535] hover:bg-[#404040] text-gray-200"
+          >
+            New project
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -23,9 +64,13 @@ export function AppSidebar() {
     const loadProjects = async () => {
       try {
         setLoading(true);
+        console.log("AppSidebar: Starting to load projects");
         const projectIds = await getProjectIds();
+        console.log("AppSidebar: Received project IDs:", projectIds);
+
         const projectPromises = projectIds.map((id) => fetchProject(id));
         const projectResults = await Promise.all(projectPromises);
+        console.log("AppSidebar: Fetched project details:", projectResults);
 
         const projectList = projectResults
           .filter((project) => project !== null)
@@ -35,9 +80,10 @@ export function AppSidebar() {
             color: project!.color || "#6366f1", // Default to indigo if no color
           }));
 
+        console.log("AppSidebar: Final processed project list:", projectList);
         setProjects(projectList);
       } catch (error) {
-        console.error("Error fetching projects:", error);
+        console.error("Error in AppSidebar loadProjects:", error);
       } finally {
         setLoading(false);
       }
@@ -54,7 +100,7 @@ export function AppSidebar() {
         {/* Navigation Items */}
         <nav className="space-y-1 px-2 mt-2">
           <SidebarNavItem href="/home" label="Home" icon={Home} />
-          <SidebarNavItem href="/tasks" label="My Tasks" icon={Info} />
+          <SidebarNavItem href="/my-tasks" label="My Tasks" icon={Info} />
           <SidebarNavItem href="/inbox" label="Inbox" icon={Inbox} />
         </nav>
 
@@ -72,7 +118,7 @@ export function AppSidebar() {
           </div>
 
           {/* Projects Section */}
-          <div className="mt-6 px-2">
+          <div className="mt-6">
             <div className="flex items-center justify-between px-3 py-2">
               <span className="text-sm text-gray-400">Projects</span>
               <Button
@@ -87,13 +133,15 @@ export function AppSidebar() {
               </Button>
             </div>
 
-            {/* Dynamic Projects List */}
+            {/* Dynamic Projects List with Empty State */}
             {loading ? (
               <div className="text-gray-400 text-sm px-3">
                 Loading projects...
               </div>
+            ) : projects.length === 0 ? (
+              <EmptyProjectsState />
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1 px-2">
                 {projects.map((project) => (
                   <Link
                     key={project.id}

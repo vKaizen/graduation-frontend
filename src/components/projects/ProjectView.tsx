@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, MoreHorizontal } from "lucide-react";
 import { DragDropContext, DropResult } from "@hello-pangea/dnd";
+import { getUserIdCookie } from "@/lib/cookies";
 
 import { BoardView } from "./board-view";
 import { ListView } from "./list-view";
@@ -17,6 +18,8 @@ import {
   deleteSection,
   updateTask,
   deleteTask,
+  moveTask,
+  reorderTasks,
 } from "@/api-service";
 import { TaskFilters } from "./task-filters";
 import { SortMenu, type SortConfig } from "./sort-menu";
@@ -27,8 +30,9 @@ export function ProjectView({
 }: Readonly<{ projectId: string; view?: string }>) {
   const [activeView, setActiveView] = useState<string>("board");
   const [project, setProject] = useState<Project | null>(null);
-  const [originalProject, setOriginalProject] = useState<Project | null>(null); // Store the original project data
+  const [originalProject, setOriginalProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
@@ -37,15 +41,137 @@ export function ProjectView({
   const [activeSort, setActiveSort] = useState<SortConfig | null>(null);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
 
-  useEffect(() => {
-    setActiveView(view ?? "board");
-    loadProject();
-  }, [view]);
+  const handleSortChange = useCallback(
+    (sortConfig: SortConfig | null) => {
+      setActiveSort(sortConfig);
+
+      if (!originalProject || !sortConfig) {
+        // If sorting is cleared, restore the original project (with filters applied)
+        handleFilterChange(activeFilters);
+        return;
+      }
+
+      // Apply sorting to each section's tasks
+      const sortedSections =
+        project?.sections.map((section) => ({
+          ...section,
+          tasks: sortTasks(section.tasks, sortConfig),
+        })) || [];
+
+      setProject((prev) =>
+        prev
+          ? {
+              ...prev,
+              sections: sortedSections,
+            }
+          : null
+      );
+    },
+    [originalProject, project, activeFilters]
+  );
+
+  const handleFilterChange = useCallback(
+    (filters: string[]) => {
+      setActiveFilters(filters);
+      if (!originalProject) return;
+
+      const applyFilters = () => {
+        // Helper functions for date checking
+        const isDateInThisWeek = (dateStr: string | undefined) => {
+          if (!dateStr) return false;
+          const date = new Date(dateStr);
+          if (isNaN(date.getTime())) return false;
+          const now = new Date();
+          const startOfWeek = new Date(
+            now.setDate(now.getDate() - now.getDay())
+          );
+          const endOfWeek = new Date(startOfWeek);
+          endOfWeek.setDate(startOfWeek.getDate() + 6);
+          return date >= startOfWeek && date <= endOfWeek;
+        };
+
+        const isDateInNextWeek = (dateStr: string | undefined) => {
+          if (!dateStr) return false;
+          const date = new Date(dateStr);
+          if (isNaN(date.getTime())) return false;
+          const now = new Date();
+          const startOfNextWeek = new Date(
+            now.setDate(now.getDate() - now.getDay() + 7)
+          );
+          const endOfNextWeek = new Date(startOfNextWeek);
+          endOfNextWeek.setDate(startOfNextWeek.getDate() + 6);
+          return date >= startOfNextWeek && date <= endOfNextWeek;
+        };
+
+        // Apply filters
+        const filteredSections = originalProject.sections.map((section) => ({
+          ...section,
+          tasks: section.tasks.filter((task) => {
+            if (filters.length === 0) return true;
+            return filters.some((filter) => {
+              switch (filter) {
+                case "Incomplete tasks":
+                  return !task.completed;
+                case "Completed tasks":
+                  return task.completed;
+                case "Just my tasks":
+                  return task.assignee === "CX";
+                case "Due this week":
+                  return isDateInThisWeek(task.dueDate);
+                case "Due next week":
+                  return isDateInNextWeek(task.dueDate);
+                default:
+                  return true;
+              }
+            });
+          }),
+        }));
+
+        setProject({
+          ...originalProject,
+          sections: filteredSections,
+        });
+      };
+
+      applyFilters();
+    },
+    [originalProject]
+  );
 
   const loadProject = async () => {
     try {
       setLoading(true);
-      const loadedProject = await fetchProject(projectId);
+      setError(null);
+
+      // Add retry logic for token availability
+      let retryCount = 0;
+      const maxRetries = 3;
+      let loadedProject = null;
+
+      while (retryCount < maxRetries) {
+        try {
+          loadedProject = await fetchProject(projectId);
+          break; // If successful, exit the retry loop
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message === "No authentication token found" &&
+            retryCount < maxRetries - 1
+          ) {
+            console.log(`Retry ${retryCount + 1}: Waiting for auth token...`);
+            await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second before retrying
+            retryCount++;
+            continue;
+          }
+          throw error; // Re-throw if it's not a token error or we're out of retries
+        }
+      }
+
+      if (!loadedProject) {
+        setError("Failed to load project: Project data is null or undefined");
+        return;
+      }
+
       console.log("ProjectView - Loaded project data:", {
         id: loadedProject._id,
         sections: loadedProject.sections?.map((section) => ({
@@ -56,57 +182,98 @@ export function ProjectView({
         })),
       });
 
-      if (!loadedProject) {
-        console.error(
-          "Failed to load project: Project data is null or undefined"
-        );
-        return;
-      }
-
       setProject(loadedProject);
       setOriginalProject(loadedProject);
     } catch (error) {
       console.error("Error loading project:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to load project"
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    setActiveView(view ?? "board");
+    loadProject();
+  }, [projectId, view]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Loading project...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <div className="text-lg text-red-500 mb-4">{error}</div>
+        <Button onClick={loadProject}>Retry</Button>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg text-red-500">Project not found</div>
+      </div>
+    );
+  }
+
   const handleAddTask = async (sectionId: string, task: Omit<Task, "_id">) => {
     if (!project || !originalProject) return;
 
-    const newTask = await addTask(project._id, sectionId, task);
-
-    // Update both project and originalProject
-    const updatedSections = project.sections.map((section) => {
-      if (section._id === sectionId) {
-        return {
-          ...section,
-          tasks: [...section.tasks, newTask],
-        };
+    try {
+      const userId = getUserIdCookie();
+      if (!userId) {
+        throw new Error("User not authenticated");
       }
-      return section;
-    });
 
-    const updatedOriginalSections = originalProject.sections.map((section) => {
-      if (section._id === sectionId) {
-        return {
-          ...section,
-          tasks: [...section.tasks, newTask],
-        };
-      }
-      return section;
-    });
+      const newTask = await addTask(project._id, sectionId, {
+        ...task,
+        createdBy: userId,
+      });
 
-    setProject({
-      ...project,
-      sections: updatedSections,
-    });
+      // Update both project and originalProject
+      const updatedSections = project.sections.map((section) => {
+        if (section._id === sectionId) {
+          return {
+            ...section,
+            tasks: [...section.tasks, newTask],
+          };
+        }
+        return section;
+      });
 
-    setOriginalProject({
-      ...originalProject,
-      sections: updatedOriginalSections,
-    });
+      const updatedOriginalSections = originalProject.sections.map(
+        (section) => {
+          if (section._id === sectionId) {
+            return {
+              ...section,
+              tasks: [...section.tasks, newTask],
+            };
+          }
+          return section;
+        }
+      );
+
+      setProject({
+        ...project,
+        sections: updatedSections,
+      });
+
+      setOriginalProject({
+        ...originalProject,
+        sections: updatedOriginalSections,
+      });
+    } catch (error) {
+      console.error("Error adding task:", error);
+      // You might want to show an error message to the user here
+    }
   };
 
   const handleUpdateTask = async (
@@ -323,86 +490,44 @@ export function ProjectView({
   };
 
   const onDragEnd = async (result: DropResult) => {
-    if (!project || !originalProject) return;
+    const { destination, source } = result;
 
-    const { destination, source, type } = result;
+    if (!destination || !project) return;
 
-    if (!destination) return;
-
+    // If dropped in the same spot
     if (
       destination.droppableId === source.droppableId &&
       destination.index === source.index
-    )
+    ) {
       return;
+    }
 
-    if (type === "section") {
+    // Handle section reordering
+    if (result.type === "section") {
+      const newSections = Array.from(project.sections);
+      const [removed] = newSections.splice(source.index, 1);
+      newSections.splice(destination.index, 0, removed);
+
+      // Optimistically update UI
+      setProject({
+        ...project,
+        sections: newSections,
+      });
+
       try {
-        console.log("Starting section reorder:", {
-          source: source.index,
-          destination: destination.index,
-        });
-
-        if (!project?._id) {
-          throw new Error("Project ID is required for reordering sections");
-        }
-
-        // Create new section arrays
-        const newSections = Array.from(project.sections);
-        const [removed] = newSections.splice(source.index, 1);
-        newSections.splice(destination.index, 0, removed);
-
-        // Get the ordered section IDs
-        const sectionIds = newSections.map((section) => section._id);
-        console.log("New section order:", sectionIds);
-
-        // Update local state optimistically
-        const previousState = { ...project };
-        setProject({
-          ...project,
-          sections: newSections,
-        });
-
-        try {
-          // Call the API to persist the new order
-          const updatedSections = await reorderSections(
-            project._id,
-            sectionIds
-          );
-          console.log("Sections reordered successfully:", updatedSections);
-
-          // Update the state with the server response
-          setProject((prev) => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              sections: updatedSections,
-            };
-          });
-
-          setOriginalProject((prev) => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              sections: updatedSections,
-            };
-          });
-        } catch (apiError) {
-          console.error("API error while reordering sections:", apiError);
-          // Revert to previous state on API error
-          setProject(previousState);
-          setOriginalProject(previousState);
-          // You might want to show an error message to the user here
-        }
+        await reorderSections(
+          project._id,
+          newSections.map((section) => section._id)
+        );
       } catch (error) {
-        console.error("Error in section reorder handler:", error);
-        // Revert to original state on error
-        if (originalProject) {
-          setProject(originalProject);
-        }
+        console.error("Error reordering sections:", error);
+        // Revert to original state if API call fails
+        setProject(originalProject);
       }
       return;
     }
 
+    // Handle task movement
     const sourceSection = project.sections.find(
       (section) => section._id === source.droppableId
     );
@@ -426,6 +551,7 @@ export function ProjectView({
       newDestTasks.splice(destination.index, 0, removed);
     }
 
+    // Create new sections array for optimistic update
     const newSections = project.sections.map((section) => {
       if (section._id === source.droppableId) {
         return { ...section, tasks: newSourceTasks };
@@ -436,10 +562,34 @@ export function ProjectView({
       return section;
     });
 
+    // Store the current state before update
+    const previousState = project;
+
+    // Optimistically update UI
     setProject({
       ...project,
       sections: newSections,
     });
+
+    try {
+      // Calculate new order
+      const newOrder = destination.index;
+
+      // Make API call to persist the change
+      await moveTask(removed._id, destination.droppableId, newOrder);
+
+      // If tasks were reordered within the same section, update the order in the database
+      if (source.droppableId === destination.droppableId) {
+        await reorderTasks(
+          source.droppableId,
+          newSourceTasks.map((task) => task._id)
+        );
+      }
+    } catch (error) {
+      console.error("Error moving task:", error);
+      // Revert to previous state if API call fails
+      setProject(previousState);
+    }
   };
 
   const toggleSection = (sectionId: string) => {
@@ -498,171 +648,6 @@ export function ProjectView({
       }
     });
   };
-
-  const handleSortChange = useCallback(
-    (sortConfig: SortConfig | null) => {
-      setActiveSort(sortConfig);
-
-      if (!originalProject || !sortConfig) {
-        // If sorting is cleared, restore the original project (with filters applied)
-        handleFilterChange(activeFilters);
-        return;
-      }
-
-      // Apply sorting to each section's tasks
-      const sortedSections =
-        project?.sections.map((section) => ({
-          ...section,
-          tasks: sortTasks(section.tasks, sortConfig),
-        })) || [];
-
-      setProject((prev) =>
-        prev
-          ? {
-              ...prev,
-              sections: sortedSections,
-            }
-          : null
-      );
-    },
-    [originalProject, project, activeFilters]
-  );
-
-  const handleFilterChange = useCallback(
-    (filters: string[]) => {
-      setActiveFilters(filters);
-
-      if (!originalProject) return;
-
-      if (filters.length === 0 && !activeSort) {
-        // If no filters and no sorting, restore original project data
-        setProject(originalProject);
-        return;
-      }
-
-      // Helper function to check if a date is within this week or next week
-      const isDateInThisWeek = (dateStr: string | undefined) => {
-        if (!dateStr) return false;
-
-        let date: Date | null = null;
-
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          date = new Date(dateStr);
-        } else {
-          try {
-            date = new Date(dateStr);
-          } catch (_error) {
-            console.log("Could not parse date:", dateStr);
-            return false;
-          }
-        }
-
-        // If date is invalid, return false
-        if (isNaN(date.getTime())) return false;
-
-        const now = new Date();
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
-        startOfWeek.setHours(0, 0, 0, 0);
-
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6); // Saturday
-        endOfWeek.setHours(23, 59, 59, 999);
-
-        return date >= startOfWeek && date <= endOfWeek;
-      };
-
-      const isDateInNextWeek = (dateStr: string | undefined) => {
-        if (!dateStr) return false;
-
-        let date: Date | null = null;
-
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          date = new Date(dateStr);
-        } else {
-          try {
-            date = new Date(dateStr);
-          } catch (_error) {
-            console.log("Could not parse date:", dateStr);
-            return false;
-          }
-        }
-
-        // If date is invalid, return false
-        if (isNaN(date.getTime())) return false;
-
-        const now = new Date();
-        const startOfNextWeek = new Date(now);
-        startOfNextWeek.setDate(now.getDate() - now.getDay() + 7); // Next Sunday
-        startOfNextWeek.setHours(0, 0, 0, 0);
-
-        const endOfNextWeek = new Date(startOfNextWeek);
-        endOfNextWeek.setDate(startOfNextWeek.getDate() + 6); // Next Saturday
-        endOfNextWeek.setHours(23, 59, 59, 999);
-
-        return date >= startOfNextWeek && date <= endOfNextWeek;
-      };
-
-      // Apply filters to the original project data
-      const filteredSections = originalProject.sections.map((section) => {
-        const filteredTasks = section.tasks.filter((task) => {
-          // If no filters are active, show all tasks
-          if (filters.length === 0) return true;
-
-          // Check each filter
-          return filters.some((filter) => {
-            switch (filter) {
-              case "Incomplete tasks":
-                return task.completed === false || task.completed === undefined;
-              case "Completed tasks":
-                return task.completed === true;
-              case "Just my tasks":
-                // Replace with your logic to determine current user
-                return task.assignee === "CX"; // Example: current user is CX
-              case "Due this week":
-                return isDateInThisWeek(task.dueDate);
-              case "Due next week":
-                return isDateInNextWeek(task.dueDate);
-              default:
-                return true;
-            }
-          });
-        });
-
-        // Apply sorting if active
-        const sortedTasks = activeSort
-          ? sortTasks(filteredTasks, activeSort)
-          : filteredTasks;
-
-        return {
-          ...section,
-          tasks: sortedTasks,
-        };
-      });
-
-      setProject({
-        ...originalProject,
-        sections: filteredSections,
-      });
-    },
-    [originalProject, activeSort]
-  );
-
-  if (loading) {
-    return (
-      <div className="text-neutral-400 text-center py-20">
-        Loading project...
-      </div>
-    );
-  }
-
-  if (!project) {
-    return (
-      <div className="text-neutral-400 text-center py-20">
-        Project not found
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col h-full">

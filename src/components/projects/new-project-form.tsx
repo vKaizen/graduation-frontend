@@ -56,12 +56,6 @@ export function NewProjectForm() {
     setError("");
 
     try {
-      // Get the user ID from localStorage
-      const userId = localStorage.getItem("userId");
-      if (!userId) {
-        throw new Error("User ID not found. Please log in again.");
-      }
-
       // Convert UI color class to hex color
       const colorHex =
         selectedColor === "bg-purple-500"
@@ -81,13 +75,12 @@ export function NewProjectForm() {
       const newProject = await createProject({
         name: projectName,
         description: "", // Optional
-        ownerId: userId,
         color: colorHex,
         status: "active",
       });
 
       if (newProject && newProject._id) {
-        router.push(`/projects/${newProject._id}`);
+        router.push(`/projects/${newProject._id}/board`);
       } else {
         setError("Failed to create project");
       }

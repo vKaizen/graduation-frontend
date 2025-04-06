@@ -8,6 +8,13 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import {
+  setAuthCookie,
+  setUserIdCookie,
+  getAuthCookie,
+  getUserIdCookie,
+  clearAuthCookies,
+} from "@/lib/cookies";
 
 interface AuthState {
   accessToken: string | null;
@@ -33,44 +40,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const router = useRouter();
 
-  // Initialize auth state from localStorage on mount
+  // Initialize auth state from cookies on mount
   useEffect(() => {
-    // Clear localStorage first to prevent hydration issues
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("accessToken");
-      const userId = localStorage.getItem("userId");
-      const username = localStorage.getItem("username");
+    const token = getAuthCookie();
+    const userId = getUserIdCookie();
 
-      if (token && userId) {
-        setAuthState({
-          accessToken: token,
-          userId: userId,
-          username: username || null,
-        });
-      }
+    if (token && userId) {
+      setAuthState({
+        accessToken: token,
+        userId: userId,
+        username: null, // We'll need to fetch this from the server or store it separately
+      });
     }
     setInitialized(true);
   }, []);
 
-  // Save auth state to localStorage whenever it changes
-  useEffect(() => {
-    if (initialized && typeof window !== "undefined") {
-      if (authState.accessToken && authState.userId) {
-        localStorage.setItem("accessToken", authState.accessToken);
-        localStorage.setItem("userId", authState.userId);
-        if (authState.username) {
-          localStorage.setItem("username", authState.username);
-        }
-      } else {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("userId");
-        localStorage.removeItem("username");
-      }
-    }
-  }, [authState, initialized]);
-
   const login = (token: string, userId: string, username?: string) => {
     console.log("Setting auth state:", { token, userId, username });
+
+    // Set cookies
+    setAuthCookie(token);
+    setUserIdCookie(userId);
+
+    // Update state
     setAuthState({
       accessToken: token,
       userId: userId,
@@ -79,11 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    // Clear cookies
+    clearAuthCookies();
+
+    // Clear state
     setAuthState({
       accessToken: null,
       userId: null,
       username: null,
     });
+
+    // Redirect to home/login
     router.push("/");
   };
 

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Eye, EyeOff, Mail, Lock, User, Briefcase } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -13,6 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { setAuthCookie, setUserIdCookie } from "@/lib/cookies";
 
 export default function ModernLogin() {
   const [showPassword, setShowPassword] = useState(false);
@@ -22,6 +23,7 @@ export default function ModernLogin() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [fullName, setFullName] = useState("");
   const [signUpEmail, setSignUpEmail] = useState("");
@@ -53,18 +55,24 @@ export default function ModernLogin() {
       const data = await response.json();
       console.log("Login successful", data);
 
-      // Store the token in localStorage
-      localStorage.setItem("accessToken", data.accessToken);
+      // Set cookies instead of using localStorage
+      setAuthCookie(data.accessToken);
 
-      // Extract userId from JWT token
+      // Extract userId from JWT token and set it in cookie
       const tokenParts = data.accessToken.split(".");
       if (tokenParts.length === 3) {
         const payload = JSON.parse(atob(tokenParts[1]));
-        localStorage.setItem("userId", payload.sub || payload.id);
+        const userId = payload.sub || payload.id;
+        setUserIdCookie(userId);
       }
 
-      router.push("/home");
-    } catch (_err) {
+      // Get the callback URL from the query parameters
+      const callbackUrl = searchParams.get("callbackUrl");
+
+      // Force a hard refresh to ensure cookies are properly set
+      window.location.href = callbackUrl || "/home";
+    } catch (error) {
+      console.error("Login error:", error);
       setError("Invalid email or password");
     } finally {
       setIsLoading(false);

@@ -3,12 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Settings, Share2, SlidersHorizontal } from "lucide-react";
-
-interface Project {
-  id: string;
-  name: string;
-  color: string;
-}
+import type { Project } from "@/types";
 
 export function ProjectHeader({ project }: { project: Project | null }) {
   if (!project) {

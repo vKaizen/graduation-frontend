@@ -1,4 +1,4 @@
-import { fetchProject } from "@/api-service";
+import { cookies } from "next/headers";
 import { Project } from "@/types";
 
 export async function fetchProjectData(
@@ -6,7 +6,33 @@ export async function fetchProjectData(
 ): Promise<Project | null> {
   try {
     console.log("fetchProjectData: Fetching project with ID:", projectId);
-    const project = await fetchProject(projectId);
+
+    // Get the auth token from server-side cookies
+    const cookieStore = cookies();
+    const token = cookieStore.get("auth_token")?.value;
+
+    if (!token) {
+      console.error("fetchProjectData: No auth token found in cookies");
+      return null;
+    }
+
+    // Make the fetch request directly instead of using api-service
+    const response = await fetch(
+      `http://localhost:3000/api/projects/${projectId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store", // Disable caching to always get fresh data
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch project: ${response.statusText}`);
+    }
+
+    const project = await response.json();
 
     if (!project) {
       console.error("fetchProjectData: Project not found");

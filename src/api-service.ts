@@ -7,8 +7,29 @@ import type {
   AddMemberDto,
   UpdateProjectStatusDto,
 } from "./types";
+import { getAuthCookie } from "./lib/cookies";
 
 const API_BASE_URL = "http://localhost:3000/api";
+
+// Helper function to get auth headers
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAuthCookie();
+  if (!token) {
+    console.warn("No auth token found in cookies");
+  } else {
+    console.log("Auth token found, length:", token.length);
+  }
+
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return headers;
+};
 
 // Auth-related API calls
 export const login = async (email: string, password: string) => {
@@ -26,41 +47,10 @@ export const login = async (email: string, password: string) => {
     }
 
     const data = await response.json();
-    console.log("Login successful, setting token...");
-
-    // Simple direct cookie setting
-    if (typeof window !== "undefined") {
-      // Set token in both cookie and localStorage for redundancy
-      document.cookie = `accessToken=${data.accessToken}; path=/`;
-      localStorage.setItem("accessToken", data.accessToken);
-
-      // Extract user ID from token
-      const tokenParts = data.accessToken.split(".");
-      const tokenPayload = JSON.parse(atob(tokenParts[1]));
-      const userId = tokenPayload.sub;
-
-      document.cookie = `userId=${userId}; path=/`;
-      localStorage.setItem("userId", userId);
-
-      console.log("Storage check:", {
-        cookie: document.cookie.includes("accessToken"),
-        localStorage: !!localStorage.getItem("accessToken"),
-      });
-
-      return {
-        accessToken: data.accessToken,
-        userId: tokenPayload.sub,
-        username: tokenPayload.username || email,
-        roles: tokenPayload.roles,
-      };
-    }
-
-    // If window is undefined (server-side), just return the data
     return {
       accessToken: data.accessToken,
-      userId: null,
-      username: email,
-      roles: [],
+      userId: data.userId,
+      username: data.username || email,
     };
   } catch (error) {
     console.error("Login error:", error);
@@ -81,32 +71,18 @@ export const register = async (email: string, password: string) => {
     throw new Error("Registration failed");
   }
 
-  const data = await response.json();
-  // Store the token if the backend returns one on registration
-  if (data.token) {
-    localStorage.setItem("token", data.token);
-  }
-  return data;
+  return response.json();
 };
 
 // Project-related API calls
 export const fetchProjects = async (): Promise<Project[]> => {
   try {
-    let headers: HeadersInit = {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    };
-
-    // Only try to access localStorage on the client side
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("accessToken");
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-    }
-
+    console.log(
+      "fetchProjects: Making request with headers:",
+      getAuthHeaders()
+    );
     const response = await fetch(`${API_BASE_URL}/projects`, {
-      headers,
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -114,6 +90,7 @@ export const fetchProjects = async (): Promise<Project[]> => {
     }
 
     const projects = await response.json();
+    console.log("fetchProjects: Received projects:", projects);
     return projects;
   } catch (error) {
     console.error("Error fetching projects:", error);
@@ -123,27 +100,28 @@ export const fetchProjects = async (): Promise<Project[]> => {
 
 export const fetchProject = async (projectId: string): Promise<Project> => {
   try {
-    const headers: HeadersInit = {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    };
-
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("accessToken");
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
+    const token = getAuthCookie();
+    if (!token) {
+      throw new Error("No authentication token found");
     }
 
     const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
-      headers,
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch project: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.message || `Failed to fetch project: ${response.statusText}`
+      );
     }
 
-    return response.json();
+    const project = await response.json();
+    if (!project) {
+      throw new Error("Project data is empty");
+    }
+
+    return project;
   } catch (error) {
     console.error("Error fetching project:", error);
     throw error;
@@ -154,17 +132,9 @@ export const createProject = async (
   projectData: CreateProjectDto
 ): Promise<Project> => {
   try {
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      throw new Error("No authentication token found");
-    }
-
     const response = await fetch(`${API_BASE_URL}/projects`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify(projectData),
     });
 
@@ -185,19 +155,11 @@ export const addProjectMember = async (
   memberData: AddMemberDto
 ): Promise<Project> => {
   try {
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      throw new Error("No authentication token found");
-    }
-
     const response = await fetch(
       `${API_BASE_URL}/projects/${projectId}/members`,
       {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(memberData),
       }
     );
@@ -219,19 +181,11 @@ export const updateProjectStatus = async (
   statusData: UpdateProjectStatusDto
 ): Promise<Project> => {
   try {
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      throw new Error("No authentication token found");
-    }
-
     const response = await fetch(
       `${API_BASE_URL}/projects/${projectId}/status`,
       {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(statusData),
       }
     );
@@ -254,21 +208,13 @@ export const createSection = async (
   title: string
 ): Promise<Section> => {
   try {
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      throw new Error("No access token found");
-    }
-
     console.log("Creating section with:", { projectId, title });
 
     const response = await fetch(
       `${API_BASE_URL}/projects/${projectId}/sections`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           title,
           project: projectId,
@@ -300,15 +246,11 @@ export const updateSection = async (
   sectionId: string,
   updates: Partial<Section>
 ): Promise<Section> => {
-  const token = localStorage.getItem("accessToken");
   const response = await fetch(
     `${API_BASE_URL}/projects/${projectId}/sections/${sectionId}`,
     {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify(updates),
     }
   );
@@ -327,19 +269,11 @@ export const deleteSection = async (
       throw new Error("Project ID and Section ID are required");
     }
 
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      throw new Error("No authentication token found");
-    }
-
     const response = await fetch(
       `${API_BASE_URL}/projects/${projectId}/sections/${sectionId}`,
       {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
       }
     );
 
@@ -358,11 +292,6 @@ export const reorderSections = async (
   sectionIds: string[]
 ): Promise<Section[]> => {
   try {
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      throw new Error("No authentication token found");
-    }
-
     if (!projectId || !Array.isArray(sectionIds) || sectionIds.length === 0) {
       throw new Error("Invalid parameters for reordering sections");
     }
@@ -377,11 +306,7 @@ export const reorderSections = async (
       `${API_BASE_URL}/projects/${projectId}/reorder-sections`,
       {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ sectionIds }),
       }
     );
@@ -427,9 +352,7 @@ export const addTask = async (
 ): Promise<Task> => {
   const response = await fetch(`${API_BASE_URL}/tasks`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify({
       ...task,
       project: projectId,
@@ -446,9 +369,7 @@ export const moveTask = async (
 ): Promise<Task> => {
   const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/move`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify({
       section: newSectionId,
       order: newOrder,
@@ -463,9 +384,7 @@ export const reorderTasks = async (
 ): Promise<Task[]> => {
   const response = await fetch(`${API_BASE_URL}/tasks/reorder/${sectionId}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ taskIds }),
   });
   return response.json();
@@ -475,17 +394,9 @@ export const updateTask = async (
   taskId: string,
   updates: Partial<Task>
 ): Promise<Task> => {
-  const token = localStorage.getItem("accessToken");
-  if (!token) {
-    throw new Error("No authentication token found");
-  }
-
   const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(updates),
   });
 
@@ -498,17 +409,9 @@ export const updateTask = async (
 
 export const deleteTask = async (taskId: string): Promise<void> => {
   try {
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      throw new Error("No authentication token found");
-    }
-
     const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
       method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -524,37 +427,38 @@ export const deleteTask = async (taskId: string): Promise<void> => {
 // Add this new function to get the list of project IDs
 export const getProjectIds = async (): Promise<string[]> => {
   try {
-    console.log("Fetching projects from:", `${API_BASE_URL}/projects`);
+    console.log("getProjectIds: Starting request");
     const response = await fetch(`${API_BASE_URL}/projects`, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Server response:", {
+      console.error("getProjectIds: Response not OK:", {
         status: response.status,
         statusText: response.statusText,
-        body: errorText,
       });
+      const errorText = await response.text();
+      console.error("getProjectIds: Error response body:", errorText);
       return [];
     }
 
     const projects = await response.json();
-    console.log("Received projects:", projects);
+    console.log("getProjectIds: Raw projects data:", projects);
 
     // Handle both array and object responses
     const projectArray = Array.isArray(projects) ? projects : [projects];
+    console.log("getProjectIds: Processed project array:", projectArray);
 
     // Filter out any invalid projects and extract IDs
-    return projectArray
-      .filter((project) => project && project._id) // Use _id since that's what MongoDB returns
+    const projectIds = projectArray
+      .filter((project) => project && project._id)
       .map((project) => project._id);
+
+    console.log("getProjectIds: Final project IDs:", projectIds);
+    return projectIds;
   } catch (error) {
-    console.error("Error fetching project IDs:", error);
+    console.error("Error in getProjectIds:", error);
     return [];
   }
 };

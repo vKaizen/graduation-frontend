@@ -35,6 +35,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 
 interface BoardViewProps {
@@ -757,10 +760,7 @@ export function BoardView({
                                                     <Button
                                                       variant="ghost"
                                                       size="sm"
-                                                      className="h-7 px-2 text-neutral-400 hover:text-neutral-300 focus-visible:ring-0 focus-visible:ring-offset-0"
-                                                      onClick={(e) =>
-                                                        e.stopPropagation()
-                                                      }
+                                                      className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-neutral-400 hover:text-neutral-300"
                                                     >
                                                       <MoreHorizontal className="h-4 w-4" />
                                                     </Button>
@@ -768,16 +768,15 @@ export function BoardView({
                                                   <DropdownMenuContent
                                                     align="end"
                                                     side="right"
-                                                    className="bg-[#353535] border-[#1a1a1a]"
+                                                    className="w-40 bg-[#1a1a1a] border-[#262626]"
                                                   >
                                                     <DropdownMenuItem
-                                                      className="text-white hover:bg-[#2f2d45] hover:text-white cursor-pointer"
+                                                      className="text-white hover:bg-[#262626] cursor-pointer"
                                                       onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleEditTask(
                                                           section._id,
-                                                          task._id,
-                                                          e
+                                                          task._id
                                                         );
                                                       }}
                                                     >
@@ -785,7 +784,7 @@ export function BoardView({
                                                       Edit
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
-                                                      className="text-white hover:bg-[#2f2d45] hover:text-white cursor-pointer"
+                                                      className="text-white hover:bg-[#262626] cursor-pointer"
                                                       onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleDuplicateTask(
@@ -797,24 +796,85 @@ export function BoardView({
                                                       <Copy className="h-4 w-4 mr-2" />
                                                       Duplicate
                                                     </DropdownMenuItem>
+                                                    <DropdownMenuSub>
+                                                      <DropdownMenuSubTrigger
+                                                        className="text-white hover:bg-[#262626] cursor-pointer"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          e.preventDefault();
+                                                        }}
+                                                      >
+                                                        <ArrowRight className="h-4 w-4 mr-2" />
+                                                        Move to
+                                                      </DropdownMenuSubTrigger>
+                                                      <DropdownMenuSubContent
+                                                        className="bg-[#1a1a1a] border-[#262626]"
+                                                        alignOffset={-5}
+                                                        side="right"
+                                                      >
+                                                        {project.sections
+                                                          .filter(
+                                                            (s) =>
+                                                              s._id !==
+                                                              section._id
+                                                          ) // Don't show current section
+                                                          .map(
+                                                            (targetSection) => (
+                                                              <DropdownMenuItem
+                                                                key={
+                                                                  targetSection._id
+                                                                }
+                                                                className="text-white hover:bg-[#262626] cursor-pointer"
+                                                                onClick={(
+                                                                  e
+                                                                ) => {
+                                                                  e.stopPropagation();
+                                                                  // Calculate new order (append to end of target section)
+                                                                  const newOrder =
+                                                                    targetSection
+                                                                      .tasks
+                                                                      .length;
+                                                                  // Move task using onDragEnd
+                                                                  onDragEnd({
+                                                                    destination:
+                                                                      {
+                                                                        droppableId:
+                                                                          targetSection._id,
+                                                                        index:
+                                                                          newOrder,
+                                                                      },
+                                                                    source: {
+                                                                      droppableId:
+                                                                        section._id,
+                                                                      index:
+                                                                        section.tasks.findIndex(
+                                                                          (t) =>
+                                                                            t._id ===
+                                                                            task._id
+                                                                        ),
+                                                                    },
+                                                                    draggableId:
+                                                                      task._id,
+                                                                    type: "task",
+                                                                    mode: "FLUID",
+                                                                    reason:
+                                                                      "DROP",
+                                                                  });
+                                                                }}
+                                                              >
+                                                                {
+                                                                  targetSection.title
+                                                                }
+                                                              </DropdownMenuItem>
+                                                            )
+                                                          )}
+                                                      </DropdownMenuSubContent>
+                                                    </DropdownMenuSub>
                                                     <DropdownMenuItem
-                                                      className="text-white hover:bg-[#2f2d45] hover:text-white cursor-pointer"
+                                                      className="text-white hover:bg-[#262626] cursor-pointer text-red-400 hover:text-red-400"
                                                       onClick={(e) => {
                                                         e.stopPropagation();
-                                                        handleMoveTask(
-                                                          section._id,
-                                                          task._id
-                                                        );
-                                                      }}
-                                                    >
-                                                      <ArrowRight className="h-4 w-4 mr-2" />
-                                                      Move to
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem
-                                                      className="text-white hover:bg-[#2f2d45] hover:text-white cursor-pointer"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteTask(
+                                                        deleteTask(
                                                           section._id,
                                                           task._id
                                                         );
