@@ -6,6 +6,7 @@ import type {
   CreateProjectDto,
   AddMemberDto,
   UpdateProjectStatusDto,
+  TaskActivity,
 } from "./types";
 import { getAuthCookie } from "./lib/cookies";
 
@@ -58,13 +59,51 @@ export const login = async (email: string, password: string) => {
   }
 };
 
-export const register = async (email: string, password: string) => {
+export const fetchUsers = async (): Promise<any[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/users`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch users");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return []; // Return empty array on error
+  }
+};
+
+export const fetchUserById = async (userId: string): Promise<any> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch user");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error fetching user ${userId}:`, error);
+    return { email: "Unknown User", fullName: "Unknown User" }; // Return fallback on error
+  }
+};
+
+export const register = async (
+  email: string,
+  password: string,
+  fullName: string
+) => {
   const response = await fetch(`${API_BASE_URL}/users/register`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, fullName }),
   });
 
   if (!response.ok) {
@@ -94,6 +133,55 @@ export const fetchProjects = async (): Promise<Project[]> => {
     return projects;
   } catch (error) {
     console.error("Error fetching projects:", error);
+    throw error;
+  }
+};
+
+export const fetchProjectActivities = async (
+  projectId: string
+): Promise<TaskActivity[]> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/projects/${projectId}/activities`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch project activities: ${response.statusText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching project activities:", error);
+    throw error;
+  }
+};
+
+export const updateProjectDescription = async (
+  projectId: string,
+  description: string
+): Promise<Project> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ description }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        errorData.message || "Failed to update project description"
+      );
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error updating project description:", error);
     throw error;
   }
 };

@@ -1,23 +1,22 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  CheckCircle2,
   User2,
   Calendar,
   Plus,
   Pencil,
-  CheckSquare,
   Trash2,
   ChevronDown,
   ChevronRight,
   MoreHorizontal,
   Copy,
   ArrowRight,
+  Loader2,
+  GripVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
 import {
   DragDropContext,
   Droppable,
@@ -44,6 +43,7 @@ import {
 import type { Project, Task } from "@/types";
 import { TaskDetails } from "./task-details";
 import type { TaskDetails as TaskDetailsType } from "@/types";
+import { format } from "date-fns";
 
 interface ListViewProps {
   project: Project;
@@ -70,8 +70,9 @@ interface NewTaskData {
   dueDate: string;
   priority: "High" | "Medium" | "Low" | undefined;
   description?: string;
-  subtasks?: any[];
+  subtasks: TaskDetailsType["subtasks"];
   isCreating: boolean;
+  status: Task["status"];
 }
 
 export function ListView({
@@ -99,6 +100,8 @@ export function ListView({
   const [selectedTask, setSelectedTask] = useState<TaskDetailsType | null>(
     null
   );
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleCreateTask = (sectionId: string) => {
     setNewTaskData((prev) => ({
@@ -111,6 +114,7 @@ export function ListView({
         description: "",
         subtasks: [],
         isCreating: true,
+        status: "not started",
       },
     }));
   };
@@ -135,7 +139,7 @@ export function ListView({
         subtasks: taskData.subtasks || [],
         project: project._id,
         section: sectionId,
-        status: "not started",
+        status: taskData.status,
         order:
           project.sections.find((s) => s._id === sectionId)?.tasks.length || 0,
       };
@@ -166,6 +170,7 @@ export function ListView({
           description: task.description || "",
           subtasks: task.subtasks || [],
           isCreating: false,
+          status: task.status,
         },
       }));
       setEditingTask({ sectionId, taskId });
@@ -182,6 +187,7 @@ export function ListView({
         priority: taskData.priority,
         description: taskData.description,
         subtasks: taskData.subtasks,
+        status: taskData.status,
       });
       setEditingTask(null);
       handleCancelCreate(sectionId);
@@ -356,6 +362,7 @@ export function ListView({
         priority: updates.priority,
         description: updates.description,
         subtasks: updates.subtasks,
+        status: updates.status,
       };
 
       updateTask(taskSectionId, taskId, taskUpdates);
@@ -370,11 +377,76 @@ export function ListView({
     }
   };
 
+  const handleBulkDelete = async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all(
+        selectedTasks.map(async (taskId) => {
+          const section = project.sections.find((s) =>
+            s.tasks.some((t) => t._id === taskId)
+          );
+          if (section) {
+            await deleteTask(section._id, taskId);
+          }
+        })
+      );
+      setSelectedTasks([]);
+    } catch (error) {
+      console.error("Failed to delete tasks:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBulkMove = async (targetSectionId: string) => {
+    setIsLoading(true);
+    try {
+      await Promise.all(
+        selectedTasks.map(async (taskId) => {
+          const task = project.sections
+            .flatMap((s) => s.tasks)
+            .find((t) => t._id === taskId);
+          if (task) {
+            const currentSection = project.sections.find((s) =>
+              s.tasks.some((t) => t._id === taskId)
+            );
+            if (currentSection) {
+              await updateTask(currentSection._id, taskId, {
+                ...task,
+                section: targetSectionId,
+              });
+            }
+          }
+        })
+      );
+      setSelectedTasks([]);
+    } catch (error) {
+      console.error("Failed to move tasks:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTasks((prev) =>
+      prev.includes(taskId)
+        ? prev.filter((id) => id !== taskId)
+        : [...prev, taskId]
+    );
+  };
+
+  const filteredAndSortedTasks = useMemo(() => {
+    return project.sections.map((section) => {
+      let tasks = [...section.tasks];
+      return { ...section, tasks };
+    });
+  }, [project.sections]);
+
   const renderTaskRow = (
     task: Task,
     section: Project["sections"][0],
     isEditing: boolean,
-    provided?: any
+    provided: any
   ) => {
     if (isEditing) {
       return (
@@ -384,24 +456,52 @@ export function ListView({
           {...provided?.dragHandleProps}
         >
           <td className="p-2 border-b border-[#353535] w-1/2">
-            <Input
-              autoFocus
-              placeholder="Task name"
-              value={newTaskData[section._id]?.title || ""}
-              onChange={(e) =>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center cursor-grab">
+                <GripVertical className="h-4 w-4 text-neutral-500 opacity-50" />
+              </div>
+              <Input
+                autoFocus
+                placeholder="Task name"
+                value={newTaskData[section._id]?.title || ""}
+                onChange={(e) =>
+                  setNewTaskData((prev) => ({
+                    ...prev,
+                    [section._id]: {
+                      ...prev[section._id],
+                      title: e.target.value,
+                    },
+                  }))
+                }
+                onKeyDown={(e) => handleKeyDown(e, section._id, task._id)}
+                className="bg-[#353535] border-0 focus-visible:ring-1 focus-visible:ring-neutral-500 text-white placeholder:text-neutral-500"
+              />
+            </div>
+          </td>
+          <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
+            <Select
+              value={newTaskData[section._id]?.status || "not started"}
+              onValueChange={(value) =>
                 setNewTaskData((prev) => ({
                   ...prev,
                   [section._id]: {
                     ...prev[section._id],
-                    title: e.target.value,
+                    status: value as Task["status"],
                   },
                 }))
               }
-              onKeyDown={(e) => handleKeyDown(e, section._id, task._id)}
-              className="bg-[#353535] border-0 focus-visible:ring-1 focus-visible:ring-neutral-500 text-white placeholder:text-neutral-500"
-            />
+            >
+              <SelectTrigger className="h-9 bg-[#353535] border-0 text-white">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#353535] border-[#1a1a1a]">
+                <SelectItem value="not started">Not Started</SelectItem>
+                <SelectItem value="in progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
           </td>
-          <td className="p-2 border-b border-[#353535] w-1/6">
+          <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
             <Select
               value={newTaskData[section._id]?.assignee || ""}
               onValueChange={(value) =>
@@ -424,7 +524,7 @@ export function ListView({
               </SelectContent>
             </Select>
           </td>
-          <td className="p-2 border-b border-[#353535] w-1/6">
+          <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
             <Input
               type="date"
               value={newTaskData[section._id]?.dueDate || ""}
@@ -440,7 +540,7 @@ export function ListView({
               className="h-9 bg-[#353535] border-0 text-sm text-white placeholder:text-neutral-500"
             />
           </td>
-          <td className="p-2 border-b border-[#353535] w-1/6">
+          <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
             <div className="flex items-center gap-2">
               <Select
                 value={newTaskData[section._id]?.priority || "none"}
@@ -485,20 +585,22 @@ export function ListView({
         {...provided?.dragHandleProps}
         className={cn(
           "group cursor-pointer",
-          selectedTaskId === task._id && "bg-[#252525]"
+          selectedTaskId === task._id && "bg-[#252525]",
+          selectedTasks.includes(task._id) && "bg-[#252525]"
         )}
-        onClick={() => handleTaskClick(task, section._id)}
+        onClick={(e) => {
+          if (e.ctrlKey || e.metaKey) {
+            toggleTaskSelection(task._id);
+          } else {
+            handleTaskClick(task, section._id);
+          }
+        }}
       >
         <td className="p-2 border-b border-[#353535] w-1/2">
-          <div className="flex items-center gap-3 pl-8">
-            <CheckCircle2
-              className={cn(
-                "h-4 w-4",
-                selectedTaskId === task._id
-                  ? "text-neutral-400"
-                  : "text-neutral-500 group-hover:text-neutral-400"
-              )}
-            />
+          <div className="flex items-center gap-3">
+            <div className="flex items-center cursor-grab">
+              <GripVertical className="h-4 w-4 text-neutral-500 opacity-50 group-hover:opacity-100" />
+            </div>
             <span
               className={cn(
                 "text-sm",
@@ -511,23 +613,42 @@ export function ListView({
             </span>
           </div>
         </td>
-        <td className="p-2 border-b border-[#353535] w-1/6">
-          <div className="flex items-center gap-2">
+        <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
+          <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                "w-2 h-2 rounded-full",
+                task.status === "completed"
+                  ? "bg-green-500"
+                  : task.status === "in progress"
+                  ? "bg-yellow-500"
+                  : "bg-neutral-500"
+              )}
+            />
+            <span className="text-sm text-neutral-400 capitalize">
+              {task.status}
+            </span>
+          </div>
+        </td>
+        <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
+          <div className="flex items-center gap-3">
             <User2 className="h-4 w-4 text-neutral-500" />
             <span className="text-sm text-neutral-400">
               {task.assignee || "Unassigned"}
             </span>
           </div>
         </td>
-        <td className="p-2 border-b border-[#353535] w-1/6">
-          <div className="flex items-center gap-2">
+        <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
+          <div className="flex items-center gap-3">
             <Calendar className="h-4 w-4 text-neutral-500" />
             <span className="text-sm text-neutral-400">
-              {task.dueDate || "No date"}
+              {task.dueDate
+                ? format(new Date(task.dueDate), "MMM d, yyyy")
+                : "No date"}
             </span>
           </div>
         </td>
-        <td className="p-2 border-b border-[#353535] w-1/6">
+        <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
           <div className="flex items-center justify-between">
             <span
               className={cn(
@@ -616,12 +737,54 @@ export function ListView({
   };
 
   return (
-    <div className="px-2">
+    <div className="px-4">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex-1">
+          {selectedTasks.length > 0 && (
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-neutral-400">
+                {selectedTasks.length} task
+                {selectedTasks.length !== 1 ? "s" : ""} selected
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={isLoading}
+                className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                Delete Selected
+              </Button>
+              <Select onValueChange={handleBulkMove} disabled={isLoading}>
+                <SelectTrigger className="w-32 bg-[#353535] border-0 text-white">
+                  <SelectValue placeholder="Move to" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#353535] border-[#1a1a1a]">
+                  {project.sections.map((section) => (
+                    <SelectItem key={section._id} value={section._id}>
+                      {section.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      </div>
+
       <table className="w-full">
         <thead>
           <tr>
             <th className="text-left p-2 text-sm font-medium text-neutral-400 w-1/2">
               Task name
+            </th>
+            <th className="text-left p-2 text-sm font-medium text-neutral-400 w-1/6">
+              Status
             </th>
             <th className="text-left p-2 text-sm font-medium text-neutral-400 w-1/6">
               Assignee
@@ -637,7 +800,7 @@ export function ListView({
       </table>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        {project.sections.map((section) => (
+        {filteredAndSortedTasks.map((section) => (
           <div key={section._id} className="mb-2">
             <div className="flex items-center gap-2 py-2 pl-2">
               <button
@@ -707,145 +870,182 @@ export function ListView({
             {!collapsedSections[section._id] && (
               <Droppable droppableId={section._id}>
                 {(provided) => (
-                  <table
-                    className="w-full border-separate border-spacing-0"
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                  >
-                    <tbody>
-                      {section.tasks.map((task, index) => (
-                        <Draggable
-                          key={task._id}
-                          draggableId={task._id}
-                          index={index}
-                        >
-                          {(provided) =>
-                            renderTaskRow(
-                              task,
-                              section,
-                              editingTask?.taskId === task._id,
-                              provided
-                            )
-                          }
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                      {newTaskData[section._id]?.isCreating && (
-                        <tr>
-                          <td className="p-2 border-b border-[#353535] w-1/2">
-                            <Input
-                              autoFocus
-                              placeholder="Task name"
-                              value={newTaskData[section._id]?.title || ""}
-                              onChange={(e) =>
-                                setNewTaskData((prev) => ({
-                                  ...prev,
-                                  [section._id]: {
-                                    ...prev[section._id],
-                                    title: e.target.value,
-                                  },
-                                }))
-                              }
-                              onKeyDown={(e) => handleKeyDown(e, section._id)}
-                              className="bg-[#353535] border-0 focus-visible:ring-1 focus-visible:ring-neutral-500 text-white placeholder:text-neutral-500"
-                            />
-                          </td>
-                          <td className="p-2 border-b border-[#353535] w-1/6">
-                            <Select
-                              value={newTaskData[section._id]?.assignee || ""}
-                              onValueChange={(value) =>
-                                setNewTaskData((prev) => ({
-                                  ...prev,
-                                  [section._id]: {
-                                    ...prev[section._id],
-                                    assignee: value || null,
-                                  },
-                                }))
-                              }
-                            >
-                              <SelectTrigger className="h-9 bg-[#353535] border-0 text-white">
-                                <SelectValue placeholder="Assignee" />
-                              </SelectTrigger>
-                              <SelectContent className="bg-[#353535] border-[#1a1a1a]">
-                                <SelectItem value="CX">CX</SelectItem>
-                                <SelectItem value="JD">JD</SelectItem>
-                                <SelectItem value="Unassigned">
-                                  Unassigned
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="p-2 border-b border-[#353535] w-1/6">
-                            <Input
-                              type="date"
-                              value={newTaskData[section._id]?.dueDate || ""}
-                              onChange={(e) =>
-                                setNewTaskData((prev) => ({
-                                  ...prev,
-                                  [section._id]: {
-                                    ...prev[section._id],
-                                    dueDate: e.target.value,
-                                  },
-                                }))
-                              }
-                              className="h-9 bg-[#353535] border-0 text-sm text-white placeholder:text-neutral-500"
-                            />
-                          </td>
-                          <td className="p-2 border-b border-[#353535] w-1/6">
-                            <div className="flex items-center gap-2">
+                  <div>
+                    <div className="h-[1px] bg-[#353535] my-2 mx-8"></div>
+                    <table
+                      className="w-full border-separate border-spacing-0"
+                      {...provided.droppableProps}
+                      ref={provided.innerRef}
+                    >
+                      <tbody>
+                        {section.tasks.map((task, index) => (
+                          <Draggable
+                            key={task._id}
+                            draggableId={task._id}
+                            index={index}
+                          >
+                            {(provided) =>
+                              renderTaskRow(
+                                task,
+                                section,
+                                editingTask?.taskId === task._id,
+                                provided
+                              )
+                            }
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                        {newTaskData[section._id]?.isCreating && (
+                          <tr>
+                            <td className="p-2 border-b border-[#353535] w-1/2">
+                              <Input
+                                autoFocus
+                                placeholder="Task name"
+                                value={newTaskData[section._id]?.title || ""}
+                                onChange={(e) =>
+                                  setNewTaskData((prev) => ({
+                                    ...prev,
+                                    [section._id]: {
+                                      ...prev[section._id],
+                                      title: e.target.value,
+                                    },
+                                  }))
+                                }
+                                onKeyDown={(e) => handleKeyDown(e, section._id)}
+                                className="bg-[#353535] border-0 focus-visible:ring-1 focus-visible:ring-neutral-500 text-white placeholder:text-neutral-500"
+                              />
+                            </td>
+                            <td className="p-2 border-b border-[#353535] w-1/6">
                               <Select
                                 value={
-                                  newTaskData[section._id]?.priority || "none"
+                                  newTaskData[section._id]?.status ||
+                                  "not started"
                                 }
                                 onValueChange={(value) =>
                                   setNewTaskData((prev) => ({
                                     ...prev,
                                     [section._id]: {
                                       ...prev[section._id],
-                                      priority: value as Task["priority"],
+                                      status: value as Task["status"],
                                     },
                                   }))
                                 }
                               >
                                 <SelectTrigger className="h-9 bg-[#353535] border-0 text-white">
-                                  <SelectValue placeholder="Priority" />
+                                  <SelectValue placeholder="Status" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-[#353535] border-[#1a1a1a]">
-                                  <SelectItem value="High">High</SelectItem>
-                                  <SelectItem value="Medium">Medium</SelectItem>
-                                  <SelectItem value="Low">Low</SelectItem>
-                                  <SelectItem value="none">None</SelectItem>
+                                  <SelectItem value="not started">
+                                    Not Started
+                                  </SelectItem>
+                                  <SelectItem value="in progress">
+                                    In Progress
+                                  </SelectItem>
+                                  <SelectItem value="completed">
+                                    Completed
+                                  </SelectItem>
                                 </SelectContent>
                               </Select>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-9 px-2 hover:text-neutral-300"
-                                onClick={() => handleAddTask(section._id)}
+                            </td>
+                            <td className="p-2 border-b border-[#353535] w-1/6">
+                              <Select
+                                value={newTaskData[section._id]?.assignee || ""}
+                                onValueChange={(value) =>
+                                  setNewTaskData((prev) => ({
+                                    ...prev,
+                                    [section._id]: {
+                                      ...prev[section._id],
+                                      assignee: value || null,
+                                    },
+                                  }))
+                                }
                               >
-                                Save
-                              </Button>
-                            </div>
+                                <SelectTrigger className="h-9 bg-[#353535] border-0 text-white">
+                                  <SelectValue placeholder="Assignee" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-[#353535] border-[#1a1a1a]">
+                                  <SelectItem value="CX">CX</SelectItem>
+                                  <SelectItem value="JD">JD</SelectItem>
+                                  <SelectItem value="Unassigned">
+                                    Unassigned
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="p-2 border-b border-[#353535] w-1/6">
+                              <Input
+                                type="date"
+                                value={newTaskData[section._id]?.dueDate || ""}
+                                onChange={(e) =>
+                                  setNewTaskData((prev) => ({
+                                    ...prev,
+                                    [section._id]: {
+                                      ...prev[section._id],
+                                      dueDate: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="h-9 bg-[#353535] border-0 text-sm text-white placeholder:text-neutral-500"
+                              />
+                            </td>
+                            <td className="p-2 border-b border-[#353535] w-1/6">
+                              <div className="flex items-center gap-2">
+                                <Select
+                                  value={
+                                    newTaskData[section._id]?.priority || "none"
+                                  }
+                                  onValueChange={(value) =>
+                                    setNewTaskData((prev) => ({
+                                      ...prev,
+                                      [section._id]: {
+                                        ...prev[section._id],
+                                        priority: value as Task["priority"],
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <SelectTrigger className="h-9 bg-[#353535] border-0 text-white">
+                                    <SelectValue placeholder="Priority" />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-[#353535] border-[#1a1a1a]">
+                                    <SelectItem value="High">High</SelectItem>
+                                    <SelectItem value="Medium">
+                                      Medium
+                                    </SelectItem>
+                                    <SelectItem value="Low">Low</SelectItem>
+                                    <SelectItem value="none">None</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-9 px-2 hover:text-neutral-300"
+                                  onClick={() => handleAddTask(section._id)}
+                                >
+                                  Save
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan={5}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start gap-2 px-6 py-2 text-neutral-500 hover:text-white hover:bg-[#252525] transition-colors"
+                              onClick={() => handleCreateTask(section._id)}
+                            >
+                              <Plus className="h-4 w-4" />
+                              Add task
+                            </Button>
                           </td>
                         </tr>
-                      )}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colSpan={4}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full justify-start gap-2 px-6 py-2 text-neutral-500 hover:text-white hover:bg-[#252525] transition-colors"
-                            onClick={() => handleCreateTask(section._id)}
-                          >
-                            <Plus className="h-4 w-4" />
-                            Add task
-                          </Button>
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
+                      </tfoot>
+                    </table>
+                  </div>
                 )}
               </Droppable>
             )}
@@ -868,20 +1068,11 @@ export function ListView({
           task={selectedTask}
           onClose={() => {
             setSelectedTask(null);
-            setSelectedTaskId(null);
           }}
-          onUpdate={(updates) => {
-            const taskSectionId = project.sections.find((section) =>
-              section.tasks.some((t) => t._id === selectedTask._id)
-            )?._id;
-
-            if (taskSectionId) {
-              updateTask(taskSectionId, selectedTask._id, updates);
-              setSelectedTask((prev) =>
-                prev ? { ...prev, ...updates } : null
-              );
-            }
-          }}
+          onUpdate={handleTaskUpdate}
+          onDelete={() =>
+            handleDeleteTask(selectedTask.project.id, selectedTask._id)
+          }
         />
       )}
     </div>

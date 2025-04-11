@@ -26,6 +26,13 @@ export interface Project {
   name: string;
   description?: string;
   color: string;
+  status?: "on-track" | "at-risk" | "off-track";
+  teamId?: string;
+  team?: {
+    _id: string;
+    name: string;
+    description?: string;
+  };
   roles: {
     userId: string;
     role: string;
@@ -42,7 +49,7 @@ export interface Project {
 // Add new types for task details
 export interface TaskActivity {
   type: "created" | "completed" | "updated" | "commented";
-  user: string;
+  user: string | { userId: string; name: string; _id?: string };
   timestamp: string;
   content?: string;
 }
@@ -85,5 +92,5 @@ export interface AddMemberDto {
 }
 
 export interface UpdateProjectStatusDto {
-  status: "active" | "completed" | "archived";
+  status: "on-track" | "at-risk" | "off-track";
 }

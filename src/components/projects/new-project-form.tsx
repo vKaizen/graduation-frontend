@@ -76,7 +76,7 @@ export function NewProjectForm() {
         name: projectName,
         description: "", // Optional
         color: colorHex,
-        status: "active",
+        status: "on-track",
       });
 
       if (newProject && newProject._id) {

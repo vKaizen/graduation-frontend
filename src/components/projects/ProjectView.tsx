@@ -8,6 +8,7 @@ import { getUserIdCookie } from "@/lib/cookies";
 
 import { BoardView } from "./board-view";
 import { ListView } from "./list-view";
+import { Overview } from "./overview";
 import type { Project, Task } from "@/types";
 import {
   addTask,
@@ -20,6 +21,7 @@ import {
   deleteTask,
   moveTask,
   reorderTasks,
+  updateProjectStatus,
 } from "@/api-service";
 import { TaskFilters } from "./task-filters";
 import { SortMenu, type SortConfig } from "./sort-menu";
@@ -69,6 +71,49 @@ export function ProjectView({
     },
     [originalProject, project, activeFilters]
   );
+
+  const handleProjectStatusUpdate = async (status?: string) => {
+    // If status is not provided, we're just updating the local state
+    // Don't reload the entire project to avoid flickering
+    if (!status) {
+      return;
+    }
+
+    try {
+      // Prepare the status data for the API call
+      const statusData = { status };
+
+      // Call the API to update the project status
+      if (project?._id) {
+        // Update in the database
+        const updatedProject = await updateProjectStatus(
+          project._id,
+          statusData
+        );
+
+        console.log(`Updated project status to: ${status}`);
+
+        // Update just the status property in the local state without refreshing everything
+        setProject((prev) => {
+          if (!prev) return updatedProject;
+          return {
+            ...prev,
+            status,
+          };
+        });
+
+        setOriginalProject((prev) => {
+          if (!prev) return updatedProject;
+          return {
+            ...prev,
+            status,
+          };
+        });
+      }
+    } catch (error) {
+      console.error("Error updating project status:", error);
+    }
+  };
 
   const handleFilterChange = useCallback(
     (filters: string[]) => {
@@ -651,79 +696,90 @@ export function ProjectView({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 h-14 border-b border-neutral-800">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            className="text-neutral-300 border-neutral-700 hover:bg-neutral-800 hover:text-neutral-200"
-            onClick={() => {
-              if (project?.sections.length > 0) {
-                const firstSectionId = project.sections[0]._id;
-                if (activeView === "board") {
-                  const boardViewRef = document.querySelector(
-                    `[data-section-id="${firstSectionId}"]`
-                  );
-                  if (boardViewRef) {
-                    const addTaskButton = boardViewRef.querySelector(
-                      "button[data-add-task]"
-                    ) as HTMLButtonElement;
-                    if (addTaskButton) {
-                      addTaskButton.click();
+      {/* Show the header bar with controls only for board and list views */}
+      {(activeView === "board" || activeView === "list") && (
+        <div className="flex items-center justify-between px-4 h-14 border-b border-neutral-800">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="text-neutral-300 border-neutral-700 hover:bg-neutral-800 hover:text-neutral-200"
+              onClick={() => {
+                if (project?.sections.length > 0) {
+                  const firstSectionId = project.sections[0]._id;
+                  if (activeView === "board") {
+                    const boardViewRef = document.querySelector(
+                      `[data-section-id="${firstSectionId}"]`
+                    );
+                    if (boardViewRef) {
+                      const addTaskButton = boardViewRef.querySelector(
+                        "button[data-add-task]"
+                      ) as HTMLButtonElement;
+                      if (addTaskButton) {
+                        addTaskButton.click();
+                      }
+                    }
+                  } else {
+                    const firstSection = project.sections[0];
+                    if (firstSection) {
+                      handleAddTask(firstSection._id, {
+                        title: "New Task",
+                        description: "",
+                        project: project._id,
+                        section: firstSection._id,
+                        assignee: null,
+                        status: "not started",
+                        order: firstSection.tasks.length,
+                      });
                     }
                   }
-                } else {
-                  const firstSection = project.sections[0];
-                  if (firstSection) {
-                    handleAddTask(firstSection._id, {
-                      title: "New Task",
-                      description: "",
-                      project: project._id,
-                      section: firstSection._id,
-                      assignee: null,
-                      status: "not started",
-                      order: firstSection.tasks.length,
-                    });
-                  }
                 }
-              }
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add task
-          </Button>
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add task
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <TaskFilters
+              activeFilters={activeFilters}
+              onFilterChange={handleFilterChange}
+            />
+            <SortMenu activeSort={activeSort} onSortChange={handleSortChange} />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
+            >
+              Group
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <TaskFilters
-            activeFilters={activeFilters}
-            onFilterChange={handleFilterChange}
-          />
-          <SortMenu activeSort={activeSort} onSortChange={handleSortChange} />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
-          >
-            Group
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      )}
 
-      <div className="flex-1 p-6 overflow-x-auto">
+      <div
+        className={`flex-1 ${
+          activeView === "overview" ? "h-full" : "p-6 overflow-x-auto"
+        }`}
+      >
         {activeView === "board" && (
           <BoardView
             project={project}
+            collapsedSections={collapsedSections}
+            toggleSection={toggleSection}
+            selectedTaskId={selectedTaskId}
+            setSelectedTaskId={setSelectedTaskId}
             onDragEnd={onDragEnd}
-            addTask={handleAddTask}
-            updateTask={handleUpdateTask}
             addSection={handleAddSection}
             updateSectionName={handleUpdateSectionName}
+            addTask={handleAddTask}
+            updateTask={handleUpdateTask}
             deleteSection={handleDeleteSection}
             deleteTask={handleDeleteTask}
           />
@@ -743,6 +799,13 @@ export function ProjectView({
             updateTask={handleUpdateTask}
             deleteSection={handleDeleteSection}
             deleteTask={handleDeleteTask}
+          />
+        )}
+
+        {activeView === "overview" && (
+          <Overview
+            project={project}
+            updateProjectStatus={handleProjectStatusUpdate}
           />
         )}
       </div>
