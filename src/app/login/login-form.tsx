@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { setAuthCookie, setUserIdCookie } from "@/lib/cookies";
+import { login, register } from "@/api-service";
 
 export default function ModernLogin() {
   const [showPassword, setShowPassword] = useState(false);
@@ -40,19 +41,7 @@ export default function ModernLogin() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3000/api/users/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Login failed");
-      }
-
-      const data = await response.json();
+      const data = await login(email, password);
       console.log("Login successful", data);
 
       // Set cookies instead of using localStorage
@@ -64,6 +53,12 @@ export default function ModernLogin() {
         const payload = JSON.parse(atob(tokenParts[1]));
         const userId = payload.sub || payload.id;
         setUserIdCookie(userId);
+      }
+
+      // Store defaultWorkspaceId in localStorage for workspace context
+      if (data.defaultWorkspaceId) {
+        console.log("Storing defaultWorkspaceId:", data.defaultWorkspaceId);
+        localStorage.setItem("defaultWorkspaceId", data.defaultWorkspaceId);
       }
 
       // Get the callback URL from the query parameters
@@ -92,28 +87,44 @@ export default function ModernLogin() {
     }
 
     try {
-      const response = await fetch("http://localhost:3000/api/users/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fullName,
-          email: signUpEmail,
-          jobTitle,
-          bio,
-          password: signUpPassword,
-        }),
-      });
+      const data = await register(
+        signUpEmail,
+        signUpPassword,
+        fullName,
+        jobTitle,
+        bio
+      );
 
-      const data = await response.json();
+      console.log("Signup successful:", data);
 
-      if (!response.ok) {
-        throw new Error(data.error || "Registration failed");
+      // After successful registration, log the user in automatically
+      const loginData = await login(signUpEmail, signUpPassword);
+
+      // Set auth cookies
+      setAuthCookie(loginData.accessToken);
+
+      // Extract userId from JWT token and set it in cookie
+      const tokenParts = loginData.accessToken.split(".");
+      if (tokenParts.length === 3) {
+        const payload = JSON.parse(atob(tokenParts[1]));
+        const userId = payload.sub || payload.id;
+        setUserIdCookie(userId);
       }
 
-      console.log("Signup successful", data);
-      router.push("/home");
+      // Store defaultWorkspaceId in localStorage for workspace context
+      if (loginData.defaultWorkspaceId) {
+        console.log(
+          "Storing defaultWorkspaceId:",
+          loginData.defaultWorkspaceId
+        );
+        localStorage.setItem(
+          "defaultWorkspaceId",
+          loginData.defaultWorkspaceId
+        );
+      }
+
+      // Redirect to home page
+      window.location.href = "/home";
     } catch (error: unknown) {
       setError(
         error instanceof Error

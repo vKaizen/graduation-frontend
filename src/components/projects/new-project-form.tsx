@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,9 @@ import {
 import { ChevronLeft, User2, X, Circle, FileText } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { createProject } from "@/api-service";
+import { createProject, fetchWorkspaces, createWorkspace } from "@/api-service";
+import type { Workspace } from "@/types";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 // Predefined task widths and tag configurations
 const TASK_CONFIGS = [
@@ -44,13 +46,52 @@ const PROJECT_COLORS = [
 export function NewProjectForm() {
   const router = useRouter();
   const [projectName, setProjectName] = useState("");
-  const [privacy, setPrivacy] = useState("workspace");
+  const [selectedWorkspace, setSelectedWorkspace] = useState<string>("");
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [selectedColor, setSelectedColor] = useState(PROJECT_COLORS[0].value);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const { currentWorkspace } = useWorkspace();
+
+  // Fetch workspaces when component mounts
+  useEffect(() => {
+    const loadWorkspaces = async () => {
+      setIsLoadingWorkspaces(true);
+      try {
+        const workspaceData = await fetchWorkspaces();
+        setWorkspaces(workspaceData);
+
+        // If the current workspace is available from the context, use it
+        if (currentWorkspace) {
+          setSelectedWorkspace(currentWorkspace._id);
+        }
+        // Otherwise, if there are workspaces, select the first one by default
+        else if (workspaceData.length > 0) {
+          setSelectedWorkspace(workspaceData[0]._id);
+        } else {
+          // Create a default workspace if none exists
+          const newWorkspace = await createWorkspace("My Workspace");
+          setWorkspaces([newWorkspace]);
+          setSelectedWorkspace(newWorkspace._id);
+        }
+      } catch (error) {
+        console.error("Error loading workspaces:", error);
+        setError("Failed to load workspaces");
+      } finally {
+        setIsLoadingWorkspaces(false);
+      }
+    };
+
+    loadWorkspaces();
+  }, [currentWorkspace]);
 
   const handleSubmit = async () => {
     if (!projectName.trim()) return;
+    if (!selectedWorkspace) {
+      setError("Please select a workspace");
+      return;
+    }
 
     setIsLoading(true);
     setError("");
@@ -77,6 +118,7 @@ export function NewProjectForm() {
         description: "", // Optional
         color: colorHex,
         status: "on-track",
+        workspaceId: selectedWorkspace,
       });
 
       if (newProject && newProject._id) {
@@ -200,25 +242,35 @@ export function NewProjectForm() {
             </div>
           </div>
 
-          {/* Privacy */}
+          {/* Workspace */}
           <div className="space-y-1.5">
-            <label className="text-sm text-[#A1A1A1]">Privacy</label>
-            <Select value={privacy} onValueChange={setPrivacy}>
+            <label className="text-sm text-[#A1A1A1]">Workspace</label>
+            <Select
+              value={selectedWorkspace}
+              onValueChange={setSelectedWorkspace}
+              disabled={isLoadingWorkspaces}
+            >
               <SelectTrigger className="w-full bg-[#121212] border-0 text-white h-11">
-                <SelectValue>
-                  <div className="flex items-center gap-2">
-                    <User2 className="h-4 w-4" />
-                    My workspace
-                  </div>
+                <SelectValue
+                  placeholder={
+                    isLoadingWorkspaces
+                      ? "Loading workspaces..."
+                      : "Select workspace"
+                  }
+                >
+                  {workspaces.find((w) => w._id === selectedWorkspace)?.name ||
+                    "Select workspace"}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent className="bg-[#121212] border-[#353535] text-white">
-                <SelectItem value="workspace">
-                  <div className="flex items-center gap-2">
-                    <User2 className="h-4 w-4" />
-                    My workspace
-                  </div>
-                </SelectItem>
+                {workspaces.map((workspace) => (
+                  <SelectItem key={workspace._id} value={workspace._id}>
+                    <div className="flex items-center gap-2">
+                      <User2 className="h-4 w-4" />
+                      {workspace.name}
+                    </div>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

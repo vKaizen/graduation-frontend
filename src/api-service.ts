@@ -7,10 +7,16 @@ import type {
   AddMemberDto,
   UpdateProjectStatusDto,
   TaskActivity,
+  Workspace,
+  AddWorkspaceMemberDto,
+  UpdateWorkspaceMemberRoleDto,
 } from "./types";
 import { getAuthCookie } from "./lib/cookies";
 
-const API_BASE_URL = "http://localhost:3000/api";
+// Make sure the API base URL is correct
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+console.log("API base URL:", API_BASE_URL);
 
 // Helper function to get auth headers
 const getAuthHeaders = (): HeadersInit => {
@@ -52,6 +58,7 @@ export const login = async (email: string, password: string) => {
       accessToken: data.accessToken,
       userId: data.userId,
       username: data.username || email,
+      defaultWorkspaceId: data.defaultWorkspaceId,
     };
   } catch (error) {
     console.error("Login error:", error);
@@ -61,56 +68,151 @@ export const login = async (email: string, password: string) => {
 
 export const fetchUsers = async (): Promise<any[]> => {
   try {
+    console.log("Fetching users with auth headers");
+
+    const headers = getAuthHeaders();
     const response = await fetch(`${API_BASE_URL}/users`, {
-      headers: getAuthHeaders(),
+      headers,
+      // Add a timeout to prevent hanging requests
+      signal: AbortSignal.timeout(10000), // 10 second timeout
     });
 
+    console.log(
+      "Users API response status:",
+      response.status,
+      response.statusText
+    );
+
     if (!response.ok) {
-      throw new Error("Failed to fetch users");
+      // Try to get more information from the error response
+      let errorMsg = `Failed to fetch users: ${response.status} ${response.statusText}`;
+
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.message || errorMsg;
+      } catch (e) {
+        // If JSON parsing fails, try to get text
+        try {
+          const errorText = await response.text();
+          if (errorText) errorMsg += ` - ${errorText}`;
+        } catch (e2) {
+          // Ignore text parsing error
+        }
+      }
+
+      if (response.status === 403) {
+        console.warn(
+          "Permission denied accessing users API - this is expected if you're not an admin"
+        );
+      } else {
+        console.error(errorMsg);
+      }
+
+      throw new Error(errorMsg);
     }
 
-    return await response.json();
+    const users = await response.json();
+    return users;
   } catch (error) {
-    console.error("Error fetching users:", error);
+    if (error.name === "AbortError") {
+      console.error("Request for users timed out");
+    } else if (
+      error.name === "TypeError" &&
+      error.message.includes("Failed to fetch")
+    ) {
+      console.error("Network error when fetching users - server may be down");
+    } else {
+      console.error("Error fetching users:", error);
+    }
     return []; // Return empty array on error
   }
 };
 
 export const fetchUserById = async (userId: string): Promise<any> => {
   try {
+    console.log(`Fetching user by ID: ${userId}`);
+
     const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
       headers: getAuthHeaders(),
+      // Add a timeout to prevent hanging requests
+      signal: AbortSignal.timeout(5000), // 5 second timeout
     });
 
     if (!response.ok) {
-      throw new Error("Failed to fetch user");
+      // Try to get more information from the error response
+      let errorMsg = `Failed to fetch user ${userId}: ${response.status} ${response.statusText}`;
+
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.message || errorMsg;
+      } catch (e) {
+        // Ignore JSON parsing error
+      }
+
+      console.warn(errorMsg);
+      throw new Error(errorMsg);
     }
 
     return await response.json();
   } catch (error) {
-    console.error(`Error fetching user ${userId}:`, error);
-    return { email: "Unknown User", fullName: "Unknown User" }; // Return fallback on error
+    if (error.name === "AbortError") {
+      console.warn(`Request for user ${userId} timed out`);
+    } else if (
+      error.name === "TypeError" &&
+      error.message.includes("Failed to fetch")
+    ) {
+      console.warn(`Network error when fetching user ${userId}`);
+    } else {
+      console.warn(`Error fetching user ${userId}:`, error);
+    }
+
+    // Return fallback user data
+    return {
+      _id: userId,
+      email: "Unknown User",
+      fullName: "Unknown User",
+    };
   }
 };
 
 export const register = async (
   email: string,
   password: string,
-  fullName: string
+  fullName: string,
+  jobTitle?: string,
+  bio?: string
 ) => {
-  const response = await fetch(`${API_BASE_URL}/users/register`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email, password, fullName }),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/users/register`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        fullName,
+        jobTitle,
+        bio,
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error("Registration failed");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Registration failed");
+    }
+
+    const data = await response.json();
+    return {
+      userId: data._id,
+      email: data.email,
+      fullName: data.fullName,
+      defaultWorkspaceId: data.defaultWorkspaceId,
+    };
+  } catch (error) {
+    console.error("Registration error:", error);
+    throw error;
   }
-
-  return response.json();
 };
 
 // Project-related API calls
@@ -595,4 +697,360 @@ export const updateSubtask = async (
       resolve(updatedSubtask);
     }, 200);
   });
+};
+
+// Add these new workspace-related functions
+
+// Fetch all workspaces for the current user
+export const fetchWorkspaces = async (): Promise<Workspace[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/workspaces`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch workspaces: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching workspaces:", error);
+    throw error;
+  }
+};
+
+// Fetch a specific workspace by ID
+export const fetchWorkspaceById = async (
+  workspaceId: string
+): Promise<Workspace> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch workspace: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error fetching workspace ${workspaceId}:`, error);
+    throw error;
+  }
+};
+
+// Create a new workspace
+export const createWorkspace = async (name: string): Promise<Workspace> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/workspaces`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ name }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create workspace: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error creating workspace:", error);
+    throw error;
+  }
+};
+
+// Fetch projects by workspace
+export const fetchProjectsByWorkspace = async (
+  workspaceId: string
+): Promise<Project[]> => {
+  try {
+    console.log(`Fetching projects for workspace ${workspaceId}`);
+    const headers = getAuthHeaders();
+    console.log(
+      "Authorization header length:",
+      headers.Authorization?.length || 0
+    );
+
+    // Debug log
+    if (!headers.Authorization) {
+      console.error("No authorization token available for request");
+      // Return empty array instead of throwing to prevent UI errors
+      return [];
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/workspaces/${workspaceId}/projects`,
+      {
+        method: "GET",
+        headers,
+        // Remove credentials:include which can cause CORS issues
+      }
+    );
+
+    console.log("Response status:", response.status, response.statusText);
+
+    if (!response.ok) {
+      // Try to get more information from the error response
+      let errorDetails = "";
+      try {
+        const errorData = await response.json();
+        errorDetails = errorData.message || errorData.error || "";
+        console.error("Error details:", errorData);
+      } catch (parseError) {
+        // If we can't parse JSON, try to get text
+        try {
+          errorDetails = await response.text();
+        } catch (textError) {
+          // If we can't get text either, use status text
+          errorDetails = response.statusText;
+        }
+      }
+
+      if (response.status === 401) {
+        console.error("Authentication error - token may be invalid or expired");
+        // Return empty array instead of throwing
+        return [];
+      }
+
+      console.error(
+        `Fetch projects error: ${response.status} - ${errorDetails}`
+      );
+      // Return empty array instead of throwing to prevent UI errors
+      return [];
+    }
+
+    const projects = await response.json();
+    console.log(`Successfully fetched ${projects.length} projects`);
+    return projects;
+  } catch (error) {
+    console.error(
+      `Error fetching projects for workspace ${workspaceId}:`,
+      error
+    );
+    // Return empty array instead of throwing to prevent UI errors
+    return [];
+  }
+};
+
+// Create a project in a specific workspace
+export const createProjectInWorkspace = async (
+  workspaceId: string,
+  projectData: Omit<CreateProjectDto, "workspaceId">
+): Promise<Project | null> => {
+  try {
+    console.log(`Creating project in workspace ${workspaceId}`, projectData);
+    const headers = getAuthHeaders();
+    console.log(
+      "Authorization header length:",
+      headers.Authorization?.length || 0
+    );
+
+    if (!headers.Authorization) {
+      console.error("No authorization token available for request");
+      return null;
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/workspaces/${workspaceId}/projects`,
+      {
+        method: "POST",
+        headers,
+        // Remove credentials
+        body: JSON.stringify(projectData),
+      }
+    );
+
+    console.log("Response status:", response.status, response.statusText);
+
+    if (!response.ok) {
+      let errorMessage = response.statusText;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+        console.error("Error details:", errorData);
+      } catch (e) {
+        // Error parsing JSON
+        try {
+          errorMessage = await response.text();
+        } catch (textError) {
+          // If we can't get text either, use status text
+          errorMessage = response.statusText;
+        }
+      }
+
+      if (response.status === 403) {
+        console.error(
+          "Access forbidden - user may not have correct workspace role"
+        );
+      }
+
+      console.error(`Failed to create project in workspace: ${errorMessage}`);
+      return null;
+    }
+
+    const project = await response.json();
+    console.log("Project created successfully:", project);
+    return project;
+  } catch (error) {
+    console.error(`Error creating project in workspace ${workspaceId}:`, error);
+    return null;
+  }
+};
+
+// Add the fetch tasks by workspace function
+export const fetchTasksByWorkspace = async (
+  workspaceId: string
+): Promise<Task[]> => {
+  try {
+    console.log(`Fetching tasks for workspace ${workspaceId}`);
+    const headers = getAuthHeaders();
+
+    // Debug log
+    if (!headers.Authorization) {
+      console.error("No authorization token available for request");
+      return [];
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/workspaces/${workspaceId}/tasks`,
+      {
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      // Try to get more information from the error response
+      let errorDetails = "";
+      try {
+        const errorData = await response.json();
+        errorDetails = errorData.message || errorData.error || "";
+      } catch (parseError) {
+        // If we can't parse JSON, try to get text
+        try {
+          errorDetails = await response.text();
+        } catch (textError) {
+          // If we can't get text either, use status text
+          errorDetails = response.statusText;
+        }
+      }
+
+      console.error(`Fetch tasks error: ${response.status} - ${errorDetails}`);
+      // Return empty array instead of throwing to prevent UI errors
+      return [];
+    }
+
+    const tasks = await response.json();
+    console.log(`Successfully fetched ${tasks.length} tasks`);
+    return tasks;
+  } catch (error) {
+    console.error(`Error fetching tasks for workspace ${workspaceId}:`, error);
+    // Return empty array instead of throwing to prevent UI errors
+    return [];
+  }
+};
+
+// Get the current user's role in a workspace
+export const getUserWorkspaceRole = async (
+  workspaceId: string
+): Promise<{ role: "owner" | "admin" | "member" | null }> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/workspaces/${workspaceId}/role`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get user role: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error getting role for workspace ${workspaceId}:`, error);
+    throw error;
+  }
+};
+
+// Add a member to a workspace with a specific role
+export const addWorkspaceMember = async (
+  workspaceId: string,
+  memberData: AddWorkspaceMemberDto
+): Promise<Workspace> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/workspaces/${workspaceId}/members`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(memberData),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to add workspace member: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error adding member to workspace ${workspaceId}:`, error);
+    throw error;
+  }
+};
+
+// Update a workspace member's role
+export const updateWorkspaceMemberRole = async (
+  workspaceId: string,
+  memberId: string,
+  roleData: UpdateWorkspaceMemberRoleDto
+): Promise<Workspace> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/workspaces/${workspaceId}/members/${memberId}/role`,
+      {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(roleData),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to update member role: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error updating role in workspace ${workspaceId}:`, error);
+    throw error;
+  }
+};
+
+// Remove a member from a workspace
+export const removeWorkspaceMember = async (
+  workspaceId: string,
+  memberId: string
+): Promise<Workspace> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/workspaces/${workspaceId}/members/${memberId}`,
+      {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to remove workspace member: ${response.statusText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(
+      `Error removing member from workspace ${workspaceId}:`,
+      error
+    );
+    throw error;
+  }
 };

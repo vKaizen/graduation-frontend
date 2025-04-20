@@ -1,8 +1,14 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowRight, CheckCircle, Zap } from "lucide-react"
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ArrowRight, CheckCircle, Zap } from "lucide-react";
 
 export default function LandingPage() {
   return (
@@ -42,10 +48,13 @@ export default function LandingPage() {
 
       <main>
         <section className="container mx-auto px-4 py-20 text-center">
-          <h1 className="text-5xl font-bold mb-6">Supercharge Your Teams Productivity with AI</h1>
+          <h1 className="text-5xl font-bold mb-6">
+            Supercharge Your Workspace Productivity with AI
+          </h1>
           <p className="text-xl mb-8 max-w-2xl mx-auto">
-            Avana is the all-in-one AI-powered platform that helps teams collaborate, manage projects, and boost
-            productivity like never before.
+            Avana is the all-in-one AI-powered platform that helps organizations
+            collaborate, manage projects, and boost productivity like never
+            before.
           </p>
           <div className="flex justify-center space-x-4">
             <Button size="lg" className="bg-[#0B5269] hover:bg-[#0B5269]/90">
@@ -64,17 +73,20 @@ export default function LandingPage() {
             {[
               {
                 title: "AI-Powered Task Management",
-                description: "Let our AI organize and prioritize your tasks for maximum efficiency.",
+                description:
+                  "Let our AI organize and prioritize your tasks for maximum efficiency.",
                 icon: <Zap className="h-12 w-12 text-[#0B5269]" />,
               },
               {
                 title: "Smart Collaboration",
-                description: "Real-time collaboration with AI-suggested team members for each task.",
+                description:
+                  "Real-time collaboration with AI-suggested collaborators for each task.",
                 icon: <CheckCircle className="h-12 w-12 text-[#0B5269]" />,
               },
               {
                 title: "Predictive Analytics",
-                description: "Forecast project timelines and resource needs with our advanced AI.",
+                description:
+                  "Forecast project timelines and resource needs with our advanced AI.",
                 icon: <ArrowRight className="h-12 w-12 text-[#0B5269]" />,
               },
             ].map((feature, index) => (
@@ -92,34 +104,54 @@ export default function LandingPage() {
         </section>
 
         <section id="pricing" className="container mx-auto px-4 py-20">
-          <h2 className="text-3xl font-bold mb-12 text-center">Simple, Transparent Pricing</h2>
+          <h2 className="text-3xl font-bold mb-12 text-center">
+            Simple, Transparent Pricing
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               {
                 title: "Starter",
                 price: "$9",
-                description: "Perfect for small teams",
-                features: ["AI Task Management", "Basic Collaboration", "5 Team Members"],
+                description: "Perfect for individuals and small workspaces",
+                features: [
+                  "AI Task Management",
+                  "Basic Collaboration",
+                  "5 Members",
+                ],
               },
               {
                 title: "Pro",
                 price: "$29",
                 description: "Ideal for growing businesses",
-                features: ["Everything in Starter", "Smart Collaboration", "Predictive Analytics", "25 Team Members"],
+                features: [
+                  "Everything in Starter",
+                  "Smart Collaboration",
+                  "Predictive Analytics",
+                  "25 Members",
+                ],
               },
               {
                 title: "Enterprise",
                 price: "Custom",
                 description: "For large organizations",
-                features: ["Everything in Pro", "Dedicated Support", "Custom Integrations", "Unlimited Team Members"],
+                features: [
+                  "Everything in Pro",
+                  "Dedicated Support",
+                  "Custom Integrations",
+                  "Unlimited Members",
+                ],
               },
             ].map((plan, index) => (
               <Card key={index} className="bg-[#2f2d45] border-0">
                 <CardHeader>
                   <CardTitle>{plan.title}</CardTitle>
                   <CardDescription>
-                    <span className="text-3xl font-bold text-white">{plan.price}</span>
-                    {plan.price !== "Custom" && <span className="text-gray-400">/month</span>}
+                    <span className="text-3xl font-bold text-white">
+                      {plan.price}
+                    </span>
+                    {plan.price !== "Custom" && (
+                      <span className="text-gray-400">/month</span>
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -140,9 +172,12 @@ export default function LandingPage() {
 
         <section className="bg-[#2f2d45] py-20">
           <div className="container mx-auto px-4">
-            <h2 className="text-3xl font-bold mb-8 text-center">Ready to Transform Your Workflow?</h2>
+            <h2 className="text-3xl font-bold mb-8 text-center">
+              Ready to Transform Your Workflow?
+            </h2>
             <p className="text-xl mb-8 text-center max-w-2xl mx-auto">
-              Join thousands of teams already using Avana to supercharge their productivity.
+              Join thousands of organizations already using Avana to supercharge
+              their productivity.
             </p>
             <form className="flex flex-col md:flex-row justify-center items-center space-y-4 md:space-y-0 md:space-x-4">
               <Input
@@ -185,10 +220,11 @@ export default function LandingPage() {
               </ul>
             </nav>
           </div>
-          <div className="mt-8 text-center text-gray-400">© 2025 Avana. All rights reserved.</div>
+          <div className="mt-8 text-center text-gray-400">
+            © 2025 Avana. All rights reserved.
+          </div>
         </div>
       </footer>
     </div>
-  )
+  );
 }
-

@@ -54,39 +54,81 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        // Get all users from the API
-        const users = await fetchUsers();
-        console.log("Fetched users for userMap:", users);
-
-        if (!users || users.length === 0) {
-          console.warn("No users returned from API");
-          return;
-        }
-
+        // Initial user map
         const newUserMap: Record<string, { email: string; fullName: string }> =
           {};
 
-        // Create a map of user IDs to user data
-        users.forEach((user) => {
-          if (user && user._id) {
-            newUserMap[user._id] = {
-              email: user.email || "Unknown Email",
-              fullName: user.fullName || user.email || "Unknown User",
-            };
-          } else {
-            console.warn("Received invalid user object:", user);
-          }
-        });
+        // Try to get all users from the API - if this fails, we'll fall back to individual fetches
+        try {
+          console.log("Attempting to fetch all users...");
+          const users = await fetchUsers();
+          console.log("Fetched users for userMap:", users);
 
-        console.log("Created userMap:", newUserMap);
+          if (users && users.length > 0) {
+            // Create a map of user IDs to user data
+            users.forEach((user) => {
+              if (user && user._id) {
+                newUserMap[user._id] = {
+                  email: user.email || "Unknown Email",
+                  fullName: user.fullName || user.email || "Unknown User",
+                };
+              }
+            });
+            console.log(
+              "Created userMap from all users:",
+              Object.keys(newUserMap).length
+            );
+          }
+        } catch (error) {
+          console.log(
+            "Could not fetch all users, falling back to individual fetches:",
+            error
+          );
+        }
+
+        // If all users fetch failed or returned empty, fetch project members individually
+        if (Object.keys(newUserMap).length === 0 && project && project.roles) {
+          console.log("Fetching individual users for project roles...");
+
+          // Get unique user IDs from project roles
+          const userIds = new Set(
+            project.roles.map((role) =>
+              typeof role.userId === "string"
+                ? role.userId
+                : role.userId.toString()
+            )
+          );
+
+          // Fetch each user individually
+          for (const userId of userIds) {
+            try {
+              const user = await fetchUserById(userId);
+              if (user) {
+                newUserMap[userId] = {
+                  email: user.email || "Unknown Email",
+                  fullName: user.fullName || user.email || "Unknown User",
+                };
+              }
+            } catch (userError) {
+              console.error(`Error fetching user ${userId}:`, userError);
+            }
+          }
+
+          console.log(
+            "Created userMap from individual fetches:",
+            Object.keys(newUserMap).length
+          );
+        }
+
+        // Set the user map with whatever data we were able to gather
         setUserMap(newUserMap);
       } catch (error) {
-        console.error("Error loading users:", error);
+        console.error("Error in loadUsers:", error);
       }
     };
 
     loadUsers();
-  }, []);
+  }, [project]);
 
   // Fetch project activities from the database
   useEffect(() => {
@@ -379,7 +421,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
             )}
           </div>
 
-          {/* Project Team/Roles */}
+          {/* Project Members/Roles */}
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold">Project roles</h2>

@@ -5,74 +5,96 @@ import { DragDropContext, DropResult } from "@hello-pangea/dnd";
 import type { Task } from "@/types";
 import { MyTasksBoardView } from "./my-tasks-board-view";
 import { ListView } from "./list-view";
+import { useWorkspace } from "@/contexts/workspace-context";
+import { fetchTasksByWorkspace } from "@/api-service";
 
 interface MyTasksViewProps {
   view?: string;
 }
 
-// Mock data for initial UI development
+// Group for temporary mock data
 const MOCK_TASKS: Record<string, Task[]> = {
-  "recently-assigned": [
+  "not-started": [
     {
       _id: "task1",
-      title: "Review project proposal",
+      title: "Create project plan",
       assignee: "user1",
       dueDate: "2023-04-30",
       priority: "High",
-      status: "in progress",
+      status: "not started",
       order: 0,
-      section: "recently-assigned",
-      project: "project1",
+      section: "not-started",
+      project: "Project A",
     },
     {
       _id: "task2",
-      title: "Prepare presentation slides",
-      assignee: "user1",
-      dueDate: "2023-05-05",
+      title: "Research competitors",
+      assignee: "user2",
+      dueDate: "2023-04-29",
       priority: "Medium",
       status: "not started",
       order: 1,
-      section: "recently-assigned",
-      project: "project2",
+      section: "not-started",
+      project: "Project B",
     },
-  ],
-  today: [
     {
       _id: "task3",
-      title: "Team meeting at 2 PM",
+      title: "Project sync at 2 PM",
       assignee: "user1",
       dueDate: "2023-04-28",
-      priority: "High",
-      status: "not started",
-      order: 0,
-      section: "today",
-      project: "project1",
-    },
-  ],
-  upcoming: [
-    {
-      _id: "task5",
-      title: "Client presentation",
-      assignee: "user1",
-      dueDate: "2023-05-10",
-      priority: "High",
-      status: "not started",
-      order: 0,
-      section: "upcoming",
-      project: "project2",
-    },
-  ],
-  later: [
-    {
-      _id: "task6",
-      title: "Quarterly review",
-      assignee: "user1",
-      dueDate: "2023-06-15",
       priority: "Low",
       status: "not started",
+      order: 2,
+      section: "not-started",
+      project: "Project C",
+    },
+  ],
+  "in-progress": [
+    {
+      _id: "task4",
+      title: "Design new landing page",
+      assignee: "user3",
+      dueDate: "2023-05-05",
+      priority: "High",
+      status: "in progress",
       order: 0,
-      section: "later",
-      project: "project1",
+      section: "in-progress",
+      project: "Project A",
+    },
+    {
+      _id: "task5",
+      title: "Create API documentation",
+      assignee: "user1",
+      dueDate: "2023-05-02",
+      priority: "Medium",
+      status: "in progress",
+      order: 1,
+      section: "in-progress",
+      project: "Project B",
+    },
+  ],
+  completed: [
+    {
+      _id: "task6",
+      title: "Setup development environment",
+      assignee: "user2",
+      dueDate: "2023-04-25",
+      priority: "Low",
+      status: "completed",
+      order: 0,
+      section: "completed",
+      project: "Project C",
+    },
+    {
+      _id: "task7",
+      title: "Initial project meeting",
+      assignee: "user1",
+      dueDate: "2023-04-20",
+      priority: "Medium",
+      status: "completed",
+      order: 1,
+      section: "completed",
+      project: "Project A",
     },
   ],
 };
@@ -92,27 +114,63 @@ export function MyTasksView({ view = "board" }: MyTasksViewProps) {
     field: string;
     direction: "asc" | "desc";
   } | null>(null);
+  const { currentWorkspace } = useWorkspace();
 
   useEffect(() => {
     setActiveView(view);
-    loadTasks();
-  }, [view]);
+    if (currentWorkspace) {
+      loadTasks();
+    }
+  }, [view, currentWorkspace]);
 
   const loadTasks = async () => {
+    if (!currentWorkspace) return;
+
     try {
       setLoading(true);
-      // In the future, this would fetch real data from the API
-      // const loadedTasks = await fetchUserTasks();
-      // setTasks(loadedTasks);
-      // setOriginalTasks(loadedTasks);
+
+      // Fetch tasks filtered by current workspace
+      const workspaceTasks = await fetchTasksByWorkspace(currentWorkspace._id);
+      console.log("Fetched workspace tasks:", workspaceTasks);
+
+      // Group tasks by section
+      const groupedTasks: Record<string, Task[]> = {
+        "not-started": [],
+        "in-progress": [],
+        completed: [],
+      };
+
+      // Process fetched tasks
+      if (workspaceTasks.length > 0) {
+        workspaceTasks.forEach((task) => {
+          const sectionKey = task.status.replace(/\s+/g, "-");
+          if (!groupedTasks[sectionKey]) {
+            groupedTasks[sectionKey] = [];
+          }
+          groupedTasks[sectionKey].push(task);
+        });
+
+        setTasks(groupedTasks);
+        setOriginalTasks(groupedTasks);
+      }
+      // Use mock data if no tasks found (for demo purposes)
+      else {
+        setTasks(MOCK_TASKS);
+        setOriginalTasks(MOCK_TASKS);
+      }
     } catch (error) {
       console.error("Error loading tasks:", error);
+      // Fallback to mock data on error
+      setTasks(MOCK_TASKS);
+      setOriginalTasks(MOCK_TASKS);
     } finally {
       setLoading(false);
     }
   };
 
   const handleAddTask = async (sectionId: string, task: Omit<Task, "_id">) => {
+    if (!currentWorkspace) return;
+
     const newTask: Task = {
       ...task,
       _id: `task${Date.now()}`,
@@ -175,39 +233,57 @@ export function MyTasksView({ view = "board" }: MyTasksViewProps) {
     setOriginalTasks(updatedTasks);
   };
 
+  if (!currentWorkspace) {
+    return (
+      <div className="flex items-center justify-center h-full text-neutral-400">
+        <p className="text-lg">Please select a workspace to view your tasks</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-black">
       <DragDropContext onDragEnd={handleDragEnd}>
-        {activeView === "board" && (
-          <div className="p-6">
-            <MyTasksBoardView
-              tasks={tasks}
-              onDragEnd={handleDragEnd}
-              addTask={handleAddTask}
-              updateTask={handleUpdateTask}
-              deleteTask={handleDeleteTask}
-              collapsedSections={collapsedSections}
-              setCollapsedSections={setCollapsedSections}
-              selectedTaskId={selectedTaskId}
-              setSelectedTaskId={setSelectedTaskId}
-            />
-          </div>
-        )}
-        {activeView === "list" && (
-          <div className="p-6">
-            <ListView
-              tasks={tasks}
-              updateTask={handleUpdateTask}
-              deleteTask={handleDeleteTask}
-              selectedTaskId={selectedTaskId}
-              setSelectedTaskId={setSelectedTaskId}
-            />
-          </div>
-        )}
-        {activeView === "calendar" && (
+        {loading ? (
           <div className="flex items-center justify-center h-full text-neutral-400">
-            <p className="text-lg">Calendar view will be implemented soon</p>
+            <div className="animate-spin h-8 w-8 border-t-2 border-b-2 border-gray-500 rounded-full"></div>
           </div>
+        ) : (
+          <>
+            {activeView === "board" && (
+              <div className="p-6">
+                <MyTasksBoardView
+                  tasks={tasks}
+                  onDragEnd={handleDragEnd}
+                  addTask={handleAddTask}
+                  updateTask={handleUpdateTask}
+                  deleteTask={handleDeleteTask}
+                  collapsedSections={collapsedSections}
+                  setCollapsedSections={setCollapsedSections}
+                  selectedTaskId={selectedTaskId}
+                  setSelectedTaskId={setSelectedTaskId}
+                />
+              </div>
+            )}
+            {activeView === "list" && (
+              <div className="p-6">
+                <ListView
+                  tasks={tasks}
+                  updateTask={handleUpdateTask}
+                  deleteTask={handleDeleteTask}
+                  selectedTaskId={selectedTaskId}
+                  setSelectedTaskId={setSelectedTaskId}
+                />
+              </div>
+            )}
+            {activeView === "calendar" && (
+              <div className="flex items-center justify-center h-full text-neutral-400">
+                <p className="text-lg">
+                  Calendar view will be implemented soon
+                </p>
+              </div>
+            )}
+          </>
         )}
       </DragDropContext>
     </div>

@@ -27,8 +27,8 @@ export interface Project {
   description?: string;
   color: string;
   status?: "on-track" | "at-risk" | "off-track";
-  teamId?: string;
-  team?: {
+  workspaceId: string;
+  workspace?: {
     _id: string;
     name: string;
     description?: string;
@@ -44,6 +44,9 @@ export interface Project {
     tasks: Task[];
     order?: number;
   }[];
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Add new types for task details
@@ -84,6 +87,7 @@ export interface CreateProjectDto {
   ownerId?: string;
   color: string;
   status: string;
+  workspaceId: string;
 }
 
 export interface AddMemberDto {
@@ -93,4 +97,36 @@ export interface AddMemberDto {
 
 export interface UpdateProjectStatusDto {
   status: "on-track" | "at-risk" | "off-track";
+}
+
+export interface WorkspaceMember {
+  userId: string;
+  role: "owner" | "admin" | "member";
+}
+
+export interface Workspace {
+  _id: string;
+  name: string;
+  owner: string;
+  members: WorkspaceMember[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AddWorkspaceMemberDto {
+  userId: string;
+  role: "admin" | "member";
+}
+
+export interface UpdateWorkspaceMemberRoleDto {
+  role: "admin" | "member";
+}
+
+export interface User {
+  _id: string;
+  email: string;
+  fullName?: string;
+  isAdmin?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }

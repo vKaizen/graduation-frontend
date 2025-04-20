@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { SidebarNavItem } from "./sidebar-nav-item";
+import { WorkspaceSelector } from "./workspace-selector";
 import {
   Home,
   Inbox,
@@ -16,7 +17,12 @@ import {
   Star,
   UserCircle,
 } from "lucide-react";
-import { getProjectIds, fetchProject } from "@/api-service"; // Import API functions
+import {
+  getProjectIds,
+  fetchProject,
+  fetchProjectsByWorkspace,
+} from "@/api-service";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 const scrollbarHideClass = `
   scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]
@@ -59,44 +65,65 @@ export function AppSidebar() {
     { id: string; name: string; color: string }[]
   >([]);
   const [loading, setLoading] = useState(true);
+  const { currentWorkspace } = useWorkspace();
 
   useEffect(() => {
     const loadProjects = async () => {
+      if (!currentWorkspace || !currentWorkspace._id) {
+        console.log("No current workspace or workspace ID");
+        setProjects([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        console.log("AppSidebar: Starting to load projects");
-        const projectIds = await getProjectIds();
-        console.log("AppSidebar: Received project IDs:", projectIds);
+        console.log(
+          "AppSidebar: Starting to load projects for workspace",
+          currentWorkspace._id
+        );
 
-        const projectPromises = projectIds.map((id) => fetchProject(id));
-        const projectResults = await Promise.all(projectPromises);
-        console.log("AppSidebar: Fetched project details:", projectResults);
+        // Fetch projects filtered by the current workspace
+        const workspaceProjects = await fetchProjectsByWorkspace(
+          currentWorkspace._id
+        );
 
-        const projectList = projectResults
+        // Function will now return empty array instead of throwing
+        console.log(
+          "AppSidebar: Received workspace projects:",
+          workspaceProjects
+        );
+
+        // Filter out any null items and map to UI format
+        const projectList = (workspaceProjects || [])
           .filter((project) => project !== null)
           .map((project) => ({
-            id: project!._id,
-            name: project!.name || "Untitled Project",
-            color: project!.color || "#6366f1", // Default to indigo if no color
+            id: project._id,
+            name: project.name || "Untitled Project",
+            color: project.color || "#6366f1", // Default to indigo if no color
           }));
 
         console.log("AppSidebar: Final processed project list:", projectList);
         setProjects(projectList);
       } catch (error) {
-        console.error("Error in AppSidebar loadProjects:", error);
+        console.error("Unexpected error in loadProjects:", error);
+        setProjects([]);
       } finally {
         setLoading(false);
       }
     };
 
     loadProjects();
-  }, []);
+  }, [currentWorkspace]);
 
   return (
     <aside
       className={`w-64 h-[calc(100vh-3.5rem)] bg-[#1a1a1a] flex flex-col border-r border-[#353535] overflow-y-auto ${scrollbarHideClass}`}
     >
       <div className="flex flex-col flex-1">
+        {/* Workspace Selector */}
+        <WorkspaceSelector />
+
         {/* Navigation Items */}
         <nav className="space-y-1 px-2 mt-2">
           <SidebarNavItem href="/home" label="Home" icon={Home} />
@@ -104,7 +131,7 @@ export function AppSidebar() {
           <SidebarNavItem href="/inbox" label="Inbox" icon={Inbox} />
         </nav>
 
-        {/* Insights & Projects Section */}
+        {/* Insights Section */}
         <div className="mt-6 px-2">
           <div className="flex items-center justify-between px-3 py-2">
             <span className="text-sm text-gray-400">Insights</span>
@@ -116,65 +143,57 @@ export function AppSidebar() {
               <Plus className="h-3 w-3" />
             </Button>
           </div>
-
-          {/* Projects Section */}
-          <div className="mt-6">
-            <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-sm text-gray-400">Projects</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-4 w-4 text-gray-400 hover:text-white"
-                asChild
-              >
-                <Link href="/projects/new">
-                  <Plus className="h-3 w-3" />
-                </Link>
-              </Button>
-            </div>
-
-            {/* Dynamic Projects List with Empty State */}
-            {loading ? (
-              <div className="text-gray-400 text-sm px-3">
-                Loading projects...
-              </div>
-            ) : projects.length === 0 ? (
-              <EmptyProjectsState />
-            ) : (
-              <div className="space-y-1 px-2">
-                {projects.map((project) => (
-                  <Link
-                    key={project.id}
-                    href={`/projects/${project.id}/board`}
-                    className="block"
-                  >
-                    <Button
-                      variant="ghost"
-                      className={`w-full justify-start text-gray-300 ${
-                        pathname.includes(`/projects/${project.id}`)
-                          ? "bg-gray-700 text-white"
-                          : ""
-                      }`}
-                    >
-                      <div
-                        className="h-3 w-3 rounded-sm mr-3"
-                        style={{ backgroundColor: project.color }}
-                      />
-                      {project.name}
-                    </Button>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Team Section */}
-        <div className="mt-6 px-2">
-          <div className="flex items-center justify-between px-3 py-2">
-            <span className="text-sm text-gray-400">Team</span>
+        {/* Projects Section */}
+        <div className="mt-6">
+          <div className="flex items-center justify-between px-5 py-2">
+            <span className="text-sm text-gray-400">Projects</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-4 w-4 text-gray-400 hover:text-white"
+              asChild
+            >
+              <Link href="/projects/new">
+                <Plus className="h-3 w-3" />
+              </Link>
+            </Button>
           </div>
-          <SidebarNavItem href="/workspace" label="My Workspace" icon={Users} />
+
+          {/* Dynamic Projects List with Empty State */}
+          {loading ? (
+            <div className="text-gray-400 text-sm px-5">
+              Loading projects...
+            </div>
+          ) : projects.length === 0 ? (
+            <EmptyProjectsState />
+          ) : (
+            <div className="space-y-1 px-2">
+              {projects.map((project) => (
+                <Link
+                  key={project.id}
+                  href={`/projects/${project.id}/board`}
+                  className="block"
+                >
+                  <Button
+                    variant="ghost"
+                    className={`w-full justify-start text-gray-300 ${
+                      pathname.includes(`/projects/${project.id}`)
+                        ? "bg-gray-700 text-white"
+                        : ""
+                    }`}
+                  >
+                    <div
+                      className="h-3 w-3 rounded-sm mr-3"
+                      style={{ backgroundColor: project.color }}
+                    />
+                    {project.name}
+                  </Button>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Bottom Section */}
@@ -185,7 +204,7 @@ export function AppSidebar() {
             className="w-full border-gray-600 text-gray-300"
           >
             <Mail className="h-4 w-4 mr-2" />
-            Invite teammates
+            Invite collaborators
           </Button>
         </div>
       </div>
