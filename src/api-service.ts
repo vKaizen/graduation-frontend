@@ -11,7 +11,9 @@ import type {
   AddWorkspaceMemberDto,
   UpdateWorkspaceMemberRoleDto,
 } from "./types";
+import { type DashboardCard } from "./contexts/DashboardContext";
 import { getAuthCookie } from "./lib/cookies";
+import { jwtDecode } from "jwt-decode";
 
 // Make sure the API base URL is correct
 const API_BASE_URL =
@@ -129,14 +131,33 @@ export const fetchUsers = async (): Promise<any[]> => {
 };
 
 export const fetchUserById = async (userId: string): Promise<any> => {
+  console.log("🔍 API: fetchUserById called with ID:", userId);
   try {
     console.log(`Fetching user by ID: ${userId}`);
+
+    // Add token debug
+    const token = getAuthCookie();
+    console.log(
+      "🔍 API: Auth token exists:",
+      !!token,
+      token ? `(length: ${token.length})` : ""
+    );
+
+    // Debug headers
+    const headers = getAuthHeaders();
+    console.log("🔍 API: Request headers:", JSON.stringify(headers));
 
     const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
       headers: getAuthHeaders(),
       // Add a timeout to prevent hanging requests
       signal: AbortSignal.timeout(5000), // 5 second timeout
     });
+
+    console.log(
+      "🔍 API: User fetch response status:",
+      response.status,
+      response.statusText
+    );
 
     if (!response.ok) {
       // Try to get more information from the error response
@@ -145,32 +166,85 @@ export const fetchUserById = async (userId: string): Promise<any> => {
       try {
         const errorData = await response.json();
         errorMsg = errorData.message || errorMsg;
+        console.log(
+          "🔍 API: Error data from response:",
+          JSON.stringify(errorData)
+        );
       } catch (e) {
         // Ignore JSON parsing error
+        console.log("🔍 API: Could not parse error response as JSON");
       }
 
       console.warn(errorMsg);
       throw new Error(errorMsg);
     }
 
-    return await response.json();
+    const userData = await response.json();
+    console.log("🔍 API: User data from API:", JSON.stringify(userData));
+    return userData;
   } catch (error) {
-    if (error.name === "AbortError") {
-      console.warn(`Request for user ${userId} timed out`);
-    } else if (
-      error.name === "TypeError" &&
-      error.message.includes("Failed to fetch")
-    ) {
-      console.warn(`Network error when fetching user ${userId}`);
+    console.log(
+      "🔍 API: Error type:",
+      error instanceof Error ? error.name : typeof error
+    );
+
+    if (error instanceof Error) {
+      if (error.name === "AbortError") {
+        console.warn(`Request for user ${userId} timed out`);
+      } else if (
+        error.name === "TypeError" &&
+        error.message.includes("Failed to fetch")
+      ) {
+        console.warn(`Network error when fetching user ${userId}`);
+      } else {
+        console.warn(`Error fetching user ${userId}:`, error.message);
+      }
     } else {
-      console.warn(`Error fetching user ${userId}:`, error);
+      console.warn(`Unknown error type when fetching user ${userId}:`, error);
     }
 
-    // Return fallback user data
+    // Try to get user info from the JWT token
+    console.log("🔍 API: Attempting to extract user info from JWT token");
+    try {
+      const token = getAuthCookie();
+      if (token) {
+        const decoded: {
+          sub?: string;
+          username?: string;
+          name?: string;
+          fullName?: string;
+          email?: string;
+        } = jwtDecode(token);
+        console.log(
+          "🔍 API: JWT token decoded in fallback:",
+          JSON.stringify(decoded)
+        );
+
+        // Extract any potentially useful identity fields from the token
+        const email = decoded.email || decoded.username || "Your Account";
+
+        // Use email as fallback for fullName if no name is present
+        const fallbackUser = {
+          _id: userId,
+          email: email,
+          fullName: decoded.fullName || decoded.name || email,
+        };
+        console.log(
+          "🔍 API: Using fallback user data from token:",
+          JSON.stringify(fallbackUser)
+        );
+        return fallbackUser;
+      }
+    } catch (tokenErr) {
+      console.warn("Error extracting user info from token:", tokenErr);
+    }
+
+    // Return fallback user data if everything else fails
+    console.log("🔍 API: Using hardcoded fallback user data");
     return {
       _id: userId,
-      email: "Unknown User",
-      fullName: "Unknown User",
+      email: "Your Account",
+      fullName: "User",
     };
   }
 };
@@ -1051,6 +1125,244 @@ export const removeWorkspaceMember = async (
       `Error removing member from workspace ${workspaceId}:`,
       error
     );
+    throw error;
+  }
+};
+
+// Preference-related API calls
+export const getUserPreferences = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/preferences`, {
+      headers: getAuthHeaders(),
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch preferences: ${response.status} ${response.statusText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching user preferences:", error);
+    return null;
+  }
+};
+
+export const updateUserPreferences = async (preferences: any) => {
+  try {
+    // Check if we're trying to create a new document or update existing one
+    const response = await fetch(`${API_BASE_URL}/preferences`, {
+      method: "PATCH", // Use PATCH instead of PUT to update existing document
+      headers: getAuthHeaders(),
+      body: JSON.stringify(preferences),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to update preferences: ${response.status} ${response.statusText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error updating user preferences:", error);
+    throw error;
+  }
+};
+
+export const updateBackgroundColor = async (backgroundColor: string) => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/preferences/background-color`,
+      {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ backgroundColor }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to update background color: ${response.status} ${response.statusText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error updating background color:", error);
+    throw error;
+  }
+};
+
+export const updateDashboardLayout = async (
+  dashboardLayout: DashboardCard[]
+) => {
+  try {
+    // Check that dashboardLayout is valid
+    if (
+      !dashboardLayout ||
+      !Array.isArray(dashboardLayout) ||
+      dashboardLayout.length === 0
+    ) {
+      console.error("Invalid dashboard layout data:", dashboardLayout);
+      throw new Error("Invalid dashboard layout data");
+    }
+
+    // We'll try different API approaches in sequence until one works
+    let success = false;
+    let responseData = null;
+
+    // Approach 1: Try the dedicated dashboard-layout endpoint with PATCH
+    try {
+      const url = `${API_BASE_URL}/preferences/dashboard-layout`;
+      console.log("Trying dedicated dashboard-layout endpoint with PATCH");
+
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ dashboardLayout }),
+      });
+
+      if (response.ok) {
+        success = true;
+        responseData = await response.json();
+        console.log(
+          "Successfully saved dashboard layout using dedicated endpoint with PATCH"
+        );
+      } else {
+        const errorText = await response.text();
+        console.log(
+          `Dedicated endpoint with PATCH failed with status ${response.status}:`,
+          errorText
+        );
+      }
+    } catch (err) {
+      console.log("Error using dedicated endpoint with PATCH:", err);
+    }
+
+    // Approach 2: Try the dedicated dashboard-layout endpoint with PUT
+    if (!success) {
+      try {
+        const url = `${API_BASE_URL}/preferences/dashboard-layout`;
+        console.log("Trying dedicated dashboard-layout endpoint with PUT");
+
+        const response = await fetch(url, {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ dashboardLayout }),
+        });
+
+        if (response.ok) {
+          success = true;
+          responseData = await response.json();
+          console.log(
+            "Successfully saved dashboard layout using dedicated endpoint with PUT"
+          );
+        } else {
+          const errorText = await response.text();
+          console.log(
+            `Dedicated endpoint with PUT failed with status ${response.status}:`,
+            errorText
+          );
+        }
+      } catch (err) {
+        console.log("Error using dedicated endpoint with PUT:", err);
+      }
+    }
+
+    // If first two approaches succeeded, return the result
+    if (success && responseData) {
+      return responseData;
+    }
+
+    // Approach 3: Try updating the entire preferences object with PATCH
+    if (!success) {
+      try {
+        // First get current preferences
+        const currentPreferences = await getUserPreferences();
+        const url = `${API_BASE_URL}/preferences`;
+        console.log("Trying main preferences endpoint with PATCH");
+
+        // Create updated preferences object
+        const updatedData = {
+          uiPreferences: {
+            ...(currentPreferences?.uiPreferences || {}),
+            dashboardLayout,
+          },
+        };
+
+        const response = await fetch(url, {
+          method: "PATCH",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(updatedData),
+        });
+
+        if (response.ok) {
+          success = true;
+          responseData = await response.json();
+          console.log(
+            "Successfully saved dashboard layout using main preferences endpoint with PATCH"
+          );
+        } else {
+          const errorText = await response.text();
+          console.log(
+            `Main preferences endpoint with PATCH failed with status ${response.status}:`,
+            errorText
+          );
+        }
+      } catch (err) {
+        console.log("Error using main preferences endpoint with PATCH:", err);
+      }
+    }
+
+    // Approach 4: Try updating the entire preferences object with PUT
+    if (!success) {
+      try {
+        // First get current preferences
+        const currentPreferences = await getUserPreferences();
+        const url = `${API_BASE_URL}/preferences`;
+        console.log("Trying main preferences endpoint with PUT");
+
+        // Create updated preferences object
+        const updatedData = {
+          uiPreferences: {
+            ...(currentPreferences?.uiPreferences || {}),
+            dashboardLayout,
+          },
+        };
+
+        const response = await fetch(url, {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(updatedData),
+        });
+
+        if (response.ok) {
+          responseData = await response.json();
+          console.log(
+            "Successfully saved dashboard layout using main preferences endpoint with PUT"
+          );
+          return responseData;
+        } else {
+          const errorText = await response.text();
+          console.log(
+            `Main preferences endpoint with PUT failed with status ${response.status}:`,
+            errorText
+          );
+        }
+      } catch (err) {
+        console.log("Error using main preferences endpoint with PUT:", err);
+      }
+    }
+
+    // If we got here, all approaches failed
+    throw new Error(
+      "Failed to update dashboard layout: All API approaches failed"
+    );
+  } catch (error: unknown) {
+    console.error("Error updating dashboard layout:", error);
     throw error;
   }
 };

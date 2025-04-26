@@ -1,8 +1,26 @@
-import { BaseCard } from "./BaseCard"
+import { BaseCard } from "./BaseCard";
 
-export function GoalsCard() {
+interface GoalsCardProps {
+  onRemove?: () => void;
+  cardId?: string;
+  isFullWidth?: boolean;
+  onSizeChange?: (isFullWidth: boolean) => void;
+}
+
+export function GoalsCard({
+  onRemove,
+  cardId = "goals-card",
+  isFullWidth = false,
+  onSizeChange,
+}: GoalsCardProps) {
   return (
-    <BaseCard title="Goals">
+    <BaseCard
+      title="Goals"
+      onRemove={onRemove}
+      cardId={cardId}
+      isFullWidth={isFullWidth}
+      onSizeChange={onSizeChange}
+    >
       <div className="space-y-4">
         <div className="space-y-1">
           <div className="h-4 bg-gray-700 rounded w-full"></div>
@@ -18,6 +36,5 @@ export function GoalsCard() {
         </div>
       </div>
     </BaseCard>
-  )
+  );
 }
-

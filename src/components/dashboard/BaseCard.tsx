@@ -1,20 +1,68 @@
-import type { ReactNode } from "react"
-import { MoreHorizontal } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
+import type { ReactNode } from "react";
+import { useState, useEffect } from "react";
+import {
+  MoreHorizontal,
+  X,
+  ArrowUpWideNarrow as ArrowsHorizontal,
+  ArrowsUpFromLine as ArrowsIn,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface BaseCardProps {
-  title: string
-  icon?: ReactNode
-  children: ReactNode
-  className?: string
-  headerAction?: ReactNode
+  title: string;
+  icon?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  headerAction?: ReactNode;
+  onRemove?: () => void;
+  isFullWidth?: boolean;
+  onSizeChange?: (isFullWidth: boolean) => void;
+  cardId?: string;
 }
 
-export function BaseCard({ title, icon, children, className, headerAction }: BaseCardProps) {
+export function BaseCard({
+  title,
+  icon,
+  children,
+  className,
+  headerAction,
+  onRemove,
+  isFullWidth = false,
+  onSizeChange,
+  cardId,
+}: BaseCardProps) {
+  const [isFullSize, setIsFullSize] = useState(isFullWidth);
+
+  // Sync local state with prop when it changes from outside
+  useEffect(() => {
+    setIsFullSize(isFullWidth);
+  }, [isFullWidth]);
+
+  const toggleSize = () => {
+    const newSize = !isFullSize;
+    setIsFullSize(newSize);
+
+    // Notify parent component about the size change
+    if (onSizeChange) {
+      onSizeChange(newSize);
+    }
+  };
+
   return (
-    <Card className={cn("bg-[#1a1a1a] border-0 shadow-md h-[350px] rounded-lg overflow-hidden", className)}>
+    <Card
+      className={cn(
+        "bg-[#1a1a1a] border-0 shadow-md h-[350px] rounded-lg overflow-hidden transition-all duration-300",
+        className
+      )}
+    >
       <div className="flex items-center justify-between p-4 border-b border-gray-800">
         <div className="flex items-center gap-3">
           {icon}
@@ -22,15 +70,52 @@ export function BaseCard({ title, icon, children, className, headerAction }: Bas
         </div>
         <div className="flex items-center">
           {headerAction || (
-            <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-white/10">
-              <MoreHorizontal className="h-5 w-5" />
-              <span className="sr-only">More options</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-gray-400 hover:text-white hover:bg-white/10"
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                  <span className="sr-only">More options</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="bg-[#262626] border-gray-700 text-white"
+              >
+                <DropdownMenuItem
+                  onClick={toggleSize}
+                  className="hover:bg-[#333333] cursor-pointer"
+                >
+                  {isFullSize ? (
+                    <>
+                      <ArrowsIn className="h-4 w-4 mr-2" />
+                      Half width
+                    </>
+                  ) : (
+                    <>
+                      <ArrowsHorizontal className="h-4 w-4 mr-2" />
+                      Full width
+                    </>
+                  )}
+                </DropdownMenuItem>
+                {onRemove && (
+                  <DropdownMenuItem
+                    onClick={onRemove}
+                    className="text-red-400 hover:text-red-300 hover:bg-[#333333] cursor-pointer"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Remove widget
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>
       <div className="p-4 overflow-y-auto h-[calc(350px-64px)]">{children}</div>
     </Card>
-  )
+  );
 }
-

@@ -9,14 +9,28 @@ import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { fetchTasksByWorkspace, updateTask } from "@/api-service";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDashboard } from "@/contexts/DashboardContext";
 
-export function TasksCard() {
+interface TasksCardProps {
+  onRemove?: () => void;
+  cardId?: string;
+  isFullWidth?: boolean;
+  onSizeChange?: (isFullWidth: boolean) => void;
+}
+
+export function TasksCard({
+  onRemove,
+  cardId = "tasks-card",
+  isFullWidth = false,
+  onSizeChange,
+}: TasksCardProps) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState("upcoming");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { currentWorkspace } = useWorkspace();
+  const { toggleCardSize } = useDashboard();
 
   // Fetch tasks from the API
   useEffect(() => {
@@ -109,10 +123,16 @@ export function TasksCard() {
     router.push(`/my-tasks/${taskId}`);
   };
 
-  // Render loading skeleton
+  // For loading state
   if (isLoading) {
     return (
-      <BaseCard title="My tasks">
+      <BaseCard
+        title="My tasks"
+        onRemove={onRemove}
+        cardId={cardId}
+        isFullWidth={isFullWidth}
+        onSizeChange={onSizeChange}
+      >
         <div className="space-y-4">
           <div className="flex space-x-2 mb-4 border-b border-gray-800">
             <Skeleton className="h-8 w-20" />
@@ -128,10 +148,16 @@ export function TasksCard() {
     );
   }
 
-  // Render error state
+  // For error state
   if (error) {
     return (
-      <BaseCard title="My tasks">
+      <BaseCard
+        title="My tasks"
+        onRemove={onRemove}
+        cardId={cardId}
+        isFullWidth={isFullWidth}
+        onSizeChange={onSizeChange}
+      >
         <div className="flex flex-col items-center justify-center h-full text-center">
           <AlertCircle className="h-10 w-10 text-red-500 mb-2" />
           <p className="text-gray-400">{error}</p>
@@ -160,8 +186,15 @@ export function TasksCard() {
     );
   }
 
+  // For normal state
   return (
-    <BaseCard title="My tasks">
+    <BaseCard
+      title="My tasks"
+      onRemove={onRemove}
+      cardId={cardId}
+      isFullWidth={isFullWidth}
+      onSizeChange={onSizeChange}
+    >
       <div className="h-full flex flex-col">
         {/* Simple tab buttons */}
         <div className="flex space-x-2 mb-4 border-b border-gray-800">

@@ -51,6 +51,7 @@ export default function ModernLogin() {
       const tokenParts = data.accessToken.split(".");
       if (tokenParts.length === 3) {
         const payload = JSON.parse(atob(tokenParts[1]));
+        console.log("JWT payload during login:", payload);
         const userId = payload.sub || payload.id;
         setUserIdCookie(userId);
       }
@@ -99,6 +100,7 @@ export default function ModernLogin() {
 
       // After successful registration, log the user in automatically
       const loginData = await login(signUpEmail, signUpPassword);
+      console.log("Auto login after registration:", loginData);
 
       // Set auth cookies
       setAuthCookie(loginData.accessToken);
@@ -107,6 +109,7 @@ export default function ModernLogin() {
       const tokenParts = loginData.accessToken.split(".");
       if (tokenParts.length === 3) {
         const payload = JSON.parse(atob(tokenParts[1]));
+        console.log("JWT payload after registration:", payload);
         const userId = payload.sub || payload.id;
         setUserIdCookie(userId);
       }

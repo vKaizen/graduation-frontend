@@ -10,7 +10,19 @@ import { fetchProjectsByWorkspace } from "@/api-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 
-export function ProjectsCard() {
+interface ProjectsCardProps {
+  onRemove?: () => void;
+  cardId?: string;
+  isFullWidth?: boolean;
+  onSizeChange?: (isFullWidth: boolean) => void;
+}
+
+export function ProjectsCard({
+  onRemove,
+  cardId = "projects-card",
+  isFullWidth = false,
+  onSizeChange,
+}: ProjectsCardProps) {
   const [projects, setProjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +96,13 @@ export function ProjectsCard() {
   // Render loading skeleton
   if (isLoading) {
     return (
-      <BaseCard title="Projects">
+      <BaseCard
+        title="Projects"
+        onRemove={onRemove}
+        cardId={cardId}
+        isFullWidth={isFullWidth}
+        onSizeChange={onSizeChange}
+      >
         <div className="space-y-4">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-10 w-full" />
@@ -98,7 +116,13 @@ export function ProjectsCard() {
   // Render error state
   if (error) {
     return (
-      <BaseCard title="Projects">
+      <BaseCard
+        title="Projects"
+        onRemove={onRemove}
+        cardId={cardId}
+        isFullWidth={isFullWidth}
+        onSizeChange={onSizeChange}
+      >
         <div className="flex flex-col items-center justify-center h-full text-center">
           <AlertCircle className="h-10 w-10 text-red-500 mb-2" />
           <p className="text-gray-400">{error}</p>
@@ -128,7 +152,13 @@ export function ProjectsCard() {
   }
 
   return (
-    <BaseCard title="Projects">
+    <BaseCard
+      title="Projects"
+      onRemove={onRemove}
+      cardId={cardId}
+      isFullWidth={isFullWidth}
+      onSizeChange={onSizeChange}
+    >
       <div className="h-full flex flex-col">
         <Button
           variant="ghost"

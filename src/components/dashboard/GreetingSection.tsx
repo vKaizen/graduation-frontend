@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Users, CalendarDays } from "lucide-react";
 import { getAuthCookie } from "@/lib/cookies";
 import { jwtDecode } from "jwt-decode";
-import { fetchUserById } from "@/api-service";
+import { fetchUserById, fetchUsers } from "@/api-service";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function GreetingSection() {
@@ -27,30 +27,124 @@ export function GreetingSection() {
       try {
         // Get token and decode it
         const token = getAuthCookie();
+
         if (!token) {
+          setUserData({
+            ...userData,
+            name: "User",
+          });
           setIsLoading(false);
           return;
         }
 
         // Decode the token to get the user ID
-        const decoded: any = jwtDecode(token);
+        const decoded: {
+          sub?: string;
+          username?: string;
+          name?: string;
+          fullName?: string;
+          email?: string;
+        } = jwtDecode(token);
+
+        // Create a userMap like in overview.tsx to handle user data better
+        const newUserMap: Record<string, { email: string; fullName: string }> =
+          {};
+
+        // First try to get all users - this might fail if user doesn't have permission
+        try {
+          const users = await fetchUsers();
+
+          if (users && users.length > 0) {
+            users.forEach((user) => {
+              if (user && user._id) {
+                newUserMap[user._id] = {
+                  email: user.email || "Unknown Email",
+                  fullName: user.fullName || user.email || "Unknown User",
+                };
+              }
+            });
+          }
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (_) {
+          // Continue with alternative approach if this fails
+        }
+
         const userId = decoded.sub;
 
-        if (!userId) {
+        // Function to find a user by email (similar to overview.tsx)
+        const findUserByEmail = (email: string) => {
+          const foundUser = Object.values(newUserMap).find(
+            (u) => u.email === email
+          );
+          return foundUser?.fullName || null;
+        };
+
+        // Try to determine name from multiple sources - follows overview.tsx pattern
+        let displayName = "User";
+
+        // Case 1: If username is an email, try to find it in our user map
+        if (decoded.username && decoded.username.includes("@")) {
+          const nameFromEmail = findUserByEmail(decoded.username);
+          if (nameFromEmail) {
+            displayName = nameFromEmail;
+            setUserData({
+              ...userData,
+              name: displayName,
+            });
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // Case 2: Use fullName from token if available
+        if (decoded.fullName) {
+          displayName = decoded.fullName;
+          setUserData({
+            ...userData,
+            name: displayName,
+          });
           setIsLoading(false);
           return;
         }
 
-        // Fetch user details
-        const user = await fetchUserById(userId);
+        // Case 3: If we have a userId, try to get user details
+        if (userId) {
+          try {
+            const user = await fetchUserById(userId);
 
+            if (user && user.fullName) {
+              displayName = user.fullName;
+
+              setUserData({
+                name: displayName,
+                tasksCompleted: 0,
+                collaborators: 0,
+              });
+              setIsLoading(false);
+              return;
+            }
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          } catch (_) {
+            // Fall through to next approach
+          }
+        }
+
+        // Case 4: Fall back to other token fields
+        if (decoded.name) {
+          displayName = decoded.name;
+        }
+
+        // Use whatever name we determined
         setUserData({
-          name: user.fullName || user.email || "User",
-          tasksCompleted: 0, // This would come from an API call in a real implementation
-          collaborators: 0, // This would come from an API call in a real implementation
+          ...userData,
+          name: displayName,
         });
-      } catch (error) {
-        console.error("Error getting user data:", error);
+      } catch (_) {
+        // Ultimate fallback if everything fails
+        setUserData({
+          ...userData,
+          name: "User",
+        });
       } finally {
         setIsLoading(false);
       }

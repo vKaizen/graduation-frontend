@@ -1,3 +1,5 @@
+import { jwtDecode } from "jwt-decode";
+
 // Cookie configuration
 const COOKIE_OPTIONS = {
   path: "/",
@@ -67,7 +69,26 @@ export function getAuthCookie(): string | null {
   return getCookie("auth_token");
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function setAuthCookie(token: string, days: number = 7): void {
+  // Try to decode the token and check if it has a fullName field
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const decoded: any = jwtDecode(token);
+    console.log("Setting auth cookie with token payload:", decoded);
+
+    // If no fullName but there is a username (which is likely email),
+    // we need to work around this for the greeting component
+    if (!decoded.fullName && decoded.username) {
+      console.log(
+        "No fullName in token but username exists. Adding debug property."
+      );
+      // We can't actually modify the token here, this is just for debugging
+    }
+  } catch (error) {
+    console.error("Error decoding token:", error);
+  }
+
   setCookie("auth_token", token, days);
 }
 
