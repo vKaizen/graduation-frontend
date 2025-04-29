@@ -14,7 +14,44 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const workspace = await fetchWorkspaceById(params.id);
+    // Get the auth token
+    const token = getAuthCookie();
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "Authentication token missing" },
+        { status: 401 }
+      );
+    }
+
+    // Make a direct request to the backend API
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/workspaces/${params.id}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        // Add a timeout to prevent hanging requests
+        signal: AbortSignal.timeout(5000), // 5 second timeout
+      }
+    );
+
+    // Log the response status for debugging
+    console.log(
+      `Workspace API response: ${response.status} ${response.statusText}`
+    );
+
+    if (!response.ok) {
+      // Pass through the status code from the backend
+      return NextResponse.json(
+        { error: `Failed to fetch workspace: ${response.statusText}` },
+        { status: response.status }
+      );
+    }
+
+    const workspace = await response.json();
     return NextResponse.json(workspace);
   } catch (error) {
     console.error("Error fetching workspace:", error);

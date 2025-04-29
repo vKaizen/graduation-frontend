@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   User2,
@@ -22,6 +22,7 @@ import {
   Droppable,
   Draggable,
   DropResult,
+  DraggableProvided,
 } from "@hello-pangea/dnd";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,10 +41,13 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
-import type { Project, Task } from "@/types";
+import type { Project, Task, User } from "@/types";
 import { TaskDetails } from "./task-details";
 import type { TaskDetails as TaskDetailsType } from "@/types";
 import { format } from "date-fns";
+import { SortConfig } from "./sort-menu";
+import { fetchProjectMembers } from "@/api-service";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface ListViewProps {
   project: Project;
@@ -62,6 +66,7 @@ interface ListViewProps {
   ) => void;
   deleteSection: (sectionId: string) => void;
   deleteTask: (sectionId: string, taskId: string) => Promise<void>;
+  activeSort?: SortConfig | null;
 }
 
 interface NewTaskData {
@@ -86,8 +91,10 @@ export function ListView({
   updateSectionName,
   addTask,
   updateTask,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   deleteSection,
   deleteTask,
+  activeSort = null,
 }: ListViewProps) {
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [newTaskData, setNewTaskData] = useState<Record<string, NewTaskData>>(
@@ -102,6 +109,27 @@ export function ListView({
   );
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [projectMembers, setProjectMembers] = useState<User[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
+  // Fetch project members when the component mounts
+  useEffect(() => {
+    if (project) {
+      const loadProjectMembers = async () => {
+        setLoadingMembers(true);
+        try {
+          const members = await fetchProjectMembers(project._id);
+          setProjectMembers(members);
+        } catch (error) {
+          console.error("Failed to load project members:", error);
+        } finally {
+          setLoadingMembers(false);
+        }
+      };
+
+      loadProjectMembers();
+    }
+  }, [project]);
 
   const handleCreateTask = (sectionId: string) => {
     setNewTaskData((prev) => ({
@@ -132,7 +160,7 @@ export function ListView({
     if (taskData && taskData.title.trim()) {
       const newTask: Omit<Task, "_id"> = {
         title: taskData.title.trim(),
-        assignee: taskData.assignee || null,
+        assignee: taskData.assignee === "unassigned" ? null : taskData.assignee,
         dueDate: taskData.dueDate || undefined,
         priority: taskData.priority || undefined,
         description: taskData.description || "",
@@ -182,7 +210,7 @@ export function ListView({
     if (taskData) {
       updateTask(sectionId, taskId, {
         title: taskData.title,
-        assignee: taskData.assignee,
+        assignee: taskData.assignee === "unassigned" ? null : taskData.assignee,
         dueDate: taskData.dueDate,
         priority: taskData.priority,
         description: taskData.description,
@@ -437,16 +465,58 @@ export function ListView({
 
   const filteredAndSortedTasks = useMemo(() => {
     return project.sections.map((section) => {
-      let tasks = [...section.tasks];
+      const tasks = [...section.tasks];
+
+      // Apply sorting based on activeSort prop
+      if (activeSort) {
+        tasks.sort((a, b) => {
+          const direction = activeSort.direction === "asc" ? 1 : -1;
+          switch (activeSort.option) {
+            case "title":
+              return direction * a.title.localeCompare(b.title);
+            case "dueDate":
+              // Handle null or undefined due dates
+              if (!a.dueDate && !b.dueDate) return 0;
+              if (!a.dueDate) return direction;
+              if (!b.dueDate) return -direction;
+              return (
+                direction *
+                (new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+              );
+            case "priority": {
+              // Define priority order: High > Medium > Low > null
+              const priorityOrder = {
+                High: 3,
+                Medium: 2,
+                Low: 1,
+                null: 0,
+                undefined: 0,
+              };
+              const aPriority = a.priority ? priorityOrder[a.priority] : 0;
+              const bPriority = b.priority ? priorityOrder[b.priority] : 0;
+              return direction * (aPriority - bPriority);
+            }
+            case "assignee":
+              // Handle null assignees
+              if (!a.assignee && !b.assignee) return 0;
+              if (!a.assignee) return direction;
+              if (!b.assignee) return -direction;
+              return direction * a.assignee.localeCompare(b.assignee);
+            default:
+              return 0;
+          }
+        });
+      }
+
       return { ...section, tasks };
     });
-  }, [project.sections]);
+  }, [project.sections, activeSort]);
 
   const renderTaskRow = (
     task: Task,
     section: Project["sections"][0],
     isEditing: boolean,
-    provided: any
+    provided: DraggableProvided
   ) => {
     if (isEditing) {
       return (
@@ -503,13 +573,13 @@ export function ListView({
           </td>
           <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
             <Select
-              value={newTaskData[section._id]?.assignee || ""}
+              value={newTaskData[section._id]?.assignee || "unassigned"}
               onValueChange={(value) =>
                 setNewTaskData((prev) => ({
                   ...prev,
                   [section._id]: {
                     ...prev[section._id],
-                    assignee: value || null,
+                    assignee: value,
                   },
                 }))
               }
@@ -518,9 +588,21 @@ export function ListView({
                 <SelectValue placeholder="Assignee" />
               </SelectTrigger>
               <SelectContent className="bg-[#353535] border-[#1a1a1a]">
-                <SelectItem value="CX">CX</SelectItem>
-                <SelectItem value="JD">JD</SelectItem>
-                <SelectItem value="Unassigned">Unassigned</SelectItem>
+                {loadingMembers ? (
+                  <SelectItem value="loading" disabled>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2 inline" />
+                    Loading members...
+                  </SelectItem>
+                ) : (
+                  <>
+                    {projectMembers.map((member) => (
+                      <SelectItem key={member._id} value={member._id}>
+                        {member.fullName || member.email}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
           </td>
@@ -584,7 +666,8 @@ export function ListView({
         {...provided?.draggableProps}
         {...provided?.dragHandleProps}
         className={cn(
-          "group cursor-pointer",
+          "group cursor-pointer transition-colors duration-150",
+          "hover:bg-[#292929]",
           selectedTaskId === task._id && "bg-[#252525]",
           selectedTasks.includes(task._id) && "bg-[#252525]"
         )}
@@ -606,7 +689,7 @@ export function ListView({
                 "text-sm",
                 selectedTaskId === task._id
                   ? "text-neutral-200"
-                  : "text-neutral-300 group-hover:text-neutral-200"
+                  : "text-neutral-300 group-hover:text-neutral-100"
               )}
             >
               {task.title}
@@ -625,23 +708,33 @@ export function ListView({
                   : "bg-neutral-500"
               )}
             />
-            <span className="text-sm text-neutral-400 capitalize">
+            <span className="text-sm text-neutral-400 capitalize group-hover:text-neutral-300">
               {task.status}
             </span>
           </div>
         </td>
         <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
           <div className="flex items-center gap-3">
-            <User2 className="h-4 w-4 text-neutral-500" />
-            <span className="text-sm text-neutral-400">
-              {task.assignee || "Unassigned"}
+            {task.assignee && task.assignee !== "" ? (
+              <Avatar className="h-5 w-5">
+                <AvatarFallback className="text-xs bg-rose-400 text-white">
+                  {task.assignee.substring(0, 2)}
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              <User2 className="h-4 w-4 text-neutral-500 group-hover:text-neutral-400" />
+            )}
+            <span className="text-sm text-neutral-400 group-hover:text-neutral-300">
+              {task.assignee && task.assignee !== ""
+                ? task.assignee
+                : "Unassigned"}
             </span>
           </div>
         </td>
         <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
           <div className="flex items-center gap-3">
-            <Calendar className="h-4 w-4 text-neutral-500" />
-            <span className="text-sm text-neutral-400">
+            <Calendar className="h-4 w-4 text-neutral-500 group-hover:text-neutral-400" />
+            <span className="text-sm text-neutral-400 group-hover:text-neutral-300">
               {task.dueDate
                 ? format(new Date(task.dueDate), "MMM d, yyyy")
                 : "No date"}
@@ -654,12 +747,12 @@ export function ListView({
               className={cn(
                 "text-sm",
                 task.priority === "High"
-                  ? "text-red-400"
+                  ? "text-red-400 group-hover:text-red-300"
                   : task.priority === "Medium"
-                  ? "text-yellow-400"
+                  ? "text-yellow-400 group-hover:text-yellow-300"
                   : task.priority === "Low"
-                  ? "text-green-400"
-                  : "text-neutral-400"
+                  ? "text-green-400 group-hover:text-green-300"
+                  : "text-neutral-400 group-hover:text-neutral-300"
               )}
             >
               {task.priority || "None"}
@@ -669,7 +762,7 @@ export function ListView({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-neutral-500 hover:text-white"
+                  className="h-8 w-8 text-neutral-500 opacity-70 group-hover:opacity-100 group-hover:text-white"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <MoreHorizontal className="h-4 w-4" />
@@ -949,13 +1042,16 @@ export function ListView({
                             </td>
                             <td className="p-2 border-b border-[#353535] w-1/6">
                               <Select
-                                value={newTaskData[section._id]?.assignee || ""}
+                                value={
+                                  newTaskData[section._id]?.assignee ||
+                                  "unassigned"
+                                }
                                 onValueChange={(value) =>
                                   setNewTaskData((prev) => ({
                                     ...prev,
                                     [section._id]: {
                                       ...prev[section._id],
-                                      assignee: value || null,
+                                      assignee: value,
                                     },
                                   }))
                                 }
@@ -964,11 +1060,26 @@ export function ListView({
                                   <SelectValue placeholder="Assignee" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-[#353535] border-[#1a1a1a]">
-                                  <SelectItem value="CX">CX</SelectItem>
-                                  <SelectItem value="JD">JD</SelectItem>
-                                  <SelectItem value="Unassigned">
-                                    Unassigned
-                                  </SelectItem>
+                                  {loadingMembers ? (
+                                    <SelectItem value="loading" disabled>
+                                      <Loader2 className="h-4 w-4 animate-spin mr-2 inline" />
+                                      Loading members...
+                                    </SelectItem>
+                                  ) : (
+                                    <>
+                                      {projectMembers.map((member) => (
+                                        <SelectItem
+                                          key={member._id}
+                                          value={member._id}
+                                        >
+                                          {member.fullName || member.email}
+                                        </SelectItem>
+                                      ))}
+                                      <SelectItem value="unassigned">
+                                        Unassigned
+                                      </SelectItem>
+                                    </>
+                                  )}
                                 </SelectContent>
                               </Select>
                             </td>

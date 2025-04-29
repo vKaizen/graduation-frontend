@@ -391,11 +391,15 @@ export function TaskDetails({
                     <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6 bg-amber-500">
                         <AvatarFallback className="text-xs">
-                          {task.assignee?.substring(0, 2) || "Ka"}
+                          {task.assignee && task.assignee !== ""
+                            ? task.assignee.substring(0, 2)
+                            : "Ka"}
                         </AvatarFallback>
                       </Avatar>
                       <span className="text-neutral-200">
-                        {task.assignee || "Kaizen"}
+                        {task.assignee && task.assignee !== ""
+                          ? task.assignee
+                          : "Kaizen"}
                       </span>
                     </div>
                     <Button
@@ -1113,11 +1117,17 @@ export function TaskDetails({
                       <div className="flex items-center gap-2">
                         <Avatar className="h-6 w-6 bg-amber-500">
                           <AvatarFallback className="text-xs">
-                            {selectedSubtask.assignee?.substring(0, 2) || "Ka"}
+                            {selectedSubtask.assignee &&
+                            selectedSubtask.assignee !== ""
+                              ? selectedSubtask.assignee.substring(0, 2)
+                              : "Ka"}
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-neutral-200">
-                          {selectedSubtask.assignee || "Kaizen"}
+                          {selectedSubtask.assignee &&
+                          selectedSubtask.assignee !== ""
+                            ? selectedSubtask.assignee
+                            : "Kaizen"}
                         </span>
                       </div>
                       <Button

@@ -160,7 +160,7 @@ export function ProjectView({
                 case "Completed tasks":
                   return task.completed;
                 case "Just my tasks":
-                  return task.assignee === "CX";
+                  return task.assignee === getUserIdCookie();
                 case "Due this week":
                   return isDateInThisWeek(task.dueDate);
                 case "Due next week":
@@ -782,6 +782,7 @@ export function ProjectView({
             updateTask={handleUpdateTask}
             deleteSection={handleDeleteSection}
             deleteTask={handleDeleteTask}
+            activeSort={activeSort}
           />
         )}
 
@@ -799,6 +800,7 @@ export function ProjectView({
             updateTask={handleUpdateTask}
             deleteSection={handleDeleteSection}
             deleteTask={handleDeleteTask}
+            activeSort={activeSort}
           />
         )}
 

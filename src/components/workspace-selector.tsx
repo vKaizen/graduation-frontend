@@ -11,10 +11,12 @@ import {
 import { Plus, ChevronsUpDown, Users } from "lucide-react";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { Workspace } from "@/types";
+import { useRouter } from "next/navigation";
 
 export function WorkspaceSelector() {
   const { workspaces, currentWorkspace, setCurrentWorkspace, isLoading } =
     useWorkspace();
+  const router = useRouter();
 
   if (isLoading) {
     return (
@@ -27,6 +29,11 @@ export function WorkspaceSelector() {
   if (!currentWorkspace) {
     return null;
   }
+
+  const handleWorkspaceSelect = (workspace: Workspace) => {
+    setCurrentWorkspace(workspace);
+    router.push(`/workspaces/${workspace._id}/overview`);
+  };
 
   return (
     <div className="px-2 py-2">
@@ -58,7 +65,7 @@ export function WorkspaceSelector() {
             {workspaces.map((workspace) => (
               <DropdownMenuItem
                 key={workspace._id}
-                onClick={() => setCurrentWorkspace(workspace)}
+                onClick={() => handleWorkspaceSelect(workspace)}
                 className={`flex items-center gap-2 rounded cursor-pointer px-2 py-1.5 text-gray-200 ${
                   workspace._id === currentWorkspace._id
                     ? "bg-[#353535]"

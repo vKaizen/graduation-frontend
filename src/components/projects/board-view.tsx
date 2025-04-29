@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, Fragment, useMemo } from "react";
+import type React from "react";
+import { useState, useEffect, Fragment, useMemo } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -13,37 +13,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus,
   User2,
-  MoreHorizontal,
-  Pencil,
-  CheckSquare,
-  CheckCircle2,
   Calendar,
   Trash2,
   ChevronDown,
   ChevronRight,
-  GripVertical,
-  Copy,
-  ArrowRight,
-  ArrowUp,
-  ArrowDown,
   Loader2,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Task, Project, TaskDetails as TaskDetailsType } from "@/types";
-// Update the import path to correctly point to the components directory
-import { TaskDetails } from "./task-details";
+import type {
+  Task,
+  Project,
+  TaskDetails as TaskDetailsType,
+  User,
+} from "@/types";
 import type { DropResult } from "@hello-pangea/dnd";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
-} from "@/components/ui/dropdown-menu";
+import { fetchProjectMembers } from "@/api-service";
+import type { SortConfig } from "./sort-menu";
+import { TaskCard } from "./Task-card";
+import { TaskDetails } from "./task-details";
 
 interface BoardViewProps {
   project: Project;
@@ -58,14 +47,20 @@ interface BoardViewProps {
   updateSectionName: (sectionId: string, newName: string) => void;
   deleteSection: (sectionId: string) => Promise<void>;
   deleteTask: (sectionId: string, taskId: string) => Promise<void>;
+  activeSort?: SortConfig | null;
 }
 
 export function BoardView({
   project,
   deleteTask,
+  activeSort = null,
   ...otherProps
 }: BoardViewProps) {
   console.log("BoardView received project:", project);
+
+  // Add state for project members
+  const [projectMembers, setProjectMembers] = useState<User[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
 
   // Add this near the top of the component to verify data
   useEffect(() => {
@@ -74,6 +69,21 @@ export function BoardView({
         "BoardView received project with sections:",
         project.sections
       );
+
+      // Fetch project members when the component mounts
+      const loadProjectMembers = async () => {
+        setLoadingMembers(true);
+        try {
+          const members = await fetchProjectMembers(project._id);
+          setProjectMembers(members);
+        } catch (error) {
+          console.error("Failed to load project members:", error);
+        } finally {
+          setLoadingMembers(false);
+        }
+      };
+
+      loadProjectMembers();
     }
   }, [project]);
 
@@ -105,6 +115,13 @@ export function BoardView({
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("title");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const getAssigneeName = (assigneeId: string | null): string => {
+    if (!assigneeId) return "Unassigned";
+
+    const member = projectMembers.find((member) => member._id === assigneeId);
+    return member ? member.fullName || member.email : assigneeId;
+  };
 
   const handleCreateTask = (sectionId: string) => {
     setNewTaskData((prev) => ({
@@ -158,6 +175,9 @@ export function BoardView({
           assignee: task.assignee,
           dueDate: task.dueDate || "",
           priority: task.priority,
+          status: task.status,
+          budget: task.budget,
+          tags: task.tags,
           isCreating: false,
         },
       }));
@@ -173,6 +193,9 @@ export function BoardView({
         assignee: taskData.assignee,
         dueDate: taskData.dueDate,
         priority: taskData.priority,
+        status: taskData.status,
+        budget: taskData.budget,
+        tags: taskData.tags,
       });
       setEditingTask(null);
       handleCancelCreate(sectionId);
@@ -227,6 +250,7 @@ export function BoardView({
     // Convert Task to TaskDetailsType with more detailed information
     const taskDetails: TaskDetailsType = {
       ...task,
+      id: task._id,
       description: task.description || "",
       activities: [
         {
@@ -244,8 +268,10 @@ export function BoardView({
       subtasks: task.subtasks || [], // Use the subtasks from the task or an empty array if undefined
       collaborators: ["Ka", "JD"],
       project: {
+        id: project._id,
         name: project.name,
-        section: sectionName,
+        status: sectionName,
+        color: project.color,
       },
     };
 
@@ -277,6 +303,9 @@ export function BoardView({
         priority: updates.priority,
         description: updates.description,
         subtasks: updates.subtasks,
+        status: updates.status,
+        budget: updates.budget,
+        tags: updates.tags,
       };
 
       // Update the task in the project
@@ -300,71 +329,49 @@ export function BoardView({
         priority: task.priority,
         description: task.description,
         subtasks: task.subtasks,
+        status: task.status,
+        budget: task.budget,
+        tags: task.tags,
       });
     }
   };
 
-  const handleMoveTask = (sectionId: string, taskId: string) => {
+  const handleMoveTask = (
+    sectionId: string,
+    taskId: string,
+    targetSectionId: string
+  ) => {
     const task = project.sections
       .find((s) => s._id === sectionId)
       ?.tasks.find((t) => t._id === taskId);
 
     if (task) {
-      // Find all sections except the current one
-      const targetSections = project.sections.filter(
-        (s) => s._id !== sectionId
+      // Calculate new order (append to end of target section)
+      const targetSection = project.sections.find(
+        (s) => s._id === targetSectionId
       );
+      if (targetSection) {
+        const newOrder = targetSection.tasks.length;
 
-      // Create a dropdown menu for section selection
-      const sectionMenu = document.createElement("div");
-      sectionMenu.className =
-        "fixed inset-0 bg-black/50 flex items-center justify-center z-50";
-      sectionMenu.innerHTML = `
-        <div class="bg-[#353535] rounded-lg p-4 w-80">
-          <h3 class="text-white font-medium mb-4">Move to section</h3>
-          <div class="space-y-2">
-            ${targetSections
-              .map(
-                (s) => `
-              <button
-                class="w-full text-left px-3 py-2 rounded text-white hover:bg-[#2f2d45]"
-                data-section-id="${s._id}"
-              >
-                ${s.title}
-              </button>
-            `
-              )
-              .join("")}
-            <button
-              class="w-full text-left px-3 py-2 rounded text-neutral-400 hover:bg-[#2f2d45]"
-              data-cancel
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      `;
-
-      // Add click handlers
-      sectionMenu.addEventListener("click", (e) => {
-        const target = e.target as HTMLElement;
-        const sectionId = target.dataset.sectionId;
-        const isCancel = target.dataset.cancel;
-
-        if (isCancel) {
-          sectionMenu.remove();
-          return;
-        }
-
-        if (sectionId) {
-          // Move the task to the new section
-          const updatedTask = { ...task, section: sectionId };
-          updateTask(sectionId, taskId, updatedTask);
-          sectionMenu.remove();
-        }
-      });
-
-      document.body.appendChild(sectionMenu);
+        // Move task using onDragEnd
+        onDragEnd({
+          destination: {
+            droppableId: targetSectionId,
+            index: newOrder,
+          },
+          source: {
+            droppableId: sectionId,
+            index:
+              project.sections
+                .find((s) => s._id === sectionId)
+                ?.tasks.findIndex((t) => t._id === taskId) || 0,
+          },
+          draggableId: taskId,
+          type: "task",
+          mode: "FLUID",
+          reason: "DROP",
+        });
+      }
     }
   };
 
@@ -444,40 +451,105 @@ export function BoardView({
         tasks = tasks.filter((task) => task.status === filterStatus);
       }
 
-      // Apply sorting
-      tasks.sort((a, b) => {
-        const direction = sortDirection === "asc" ? 1 : -1;
-        switch (sortBy) {
-          case "title":
-            return direction * a.title.localeCompare(b.title);
-          case "dueDate":
-            return (
-              direction *
-              (new Date(a.dueDate || 0).getTime() -
-                new Date(b.dueDate || 0).getTime())
-            );
-          case "priority":
-            const priorityOrder = { High: 3, Medium: 2, Low: 1, none: 0 };
-            return (
-              direction *
-              (priorityOrder[a.priority || "none"] -
-                priorityOrder[b.priority || "none"])
-            );
-          case "status":
-            const statusOrder = {
-              completed: 3,
-              "in progress": 2,
-              "not started": 1,
-            };
-            return direction * (statusOrder[a.status] - statusOrder[b.status]);
-          default:
-            return 0;
-        }
-      });
+      // Apply sorting based on activeSort prop
+      if (activeSort) {
+        tasks.sort((a, b) => {
+          const direction = activeSort.direction === "asc" ? 1 : -1;
+          switch (activeSort.option) {
+            case "title":
+              return direction * a.title.localeCompare(b.title);
+            case "dueDate":
+              // Handle null or undefined due dates
+              if (!a.dueDate && !b.dueDate) return 0;
+              if (!a.dueDate) return direction;
+              if (!b.dueDate) return -direction;
+              return (
+                direction *
+                (new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+              );
+            case "priority": {
+              // Define priority order: High > Medium > Low > null
+              const priorityOrder = {
+                High: 3,
+                Medium: 2,
+                Low: 1,
+                none: 0,
+                undefined: 0,
+                null: 0,
+              };
+              const aPriority = a.priority
+                ? priorityOrder[a.priority]
+                : priorityOrder.none;
+              const bPriority = b.priority
+                ? priorityOrder[b.priority]
+                : priorityOrder.none;
+              return direction * (aPriority - bPriority);
+            }
+            case "status": {
+              const statusOrder = {
+                completed: 3,
+                "in progress": 2,
+                "not started": 1,
+              };
+              return (
+                direction * (statusOrder[a.status] - statusOrder[b.status])
+              );
+            }
+            case "assignee":
+              // Handle null assignees
+              if (!a.assignee && !b.assignee) return 0;
+              if (!a.assignee) return direction;
+              if (!b.assignee) return -direction;
+              return direction * a.assignee.localeCompare(b.assignee);
+            default:
+              return 0;
+          }
+        });
+      } else {
+        // If no activeSort is provided, use default internal sorting
+        tasks.sort((a, b) => {
+          const direction = sortDirection === "asc" ? 1 : -1;
+          switch (sortBy) {
+            case "title":
+              return direction * a.title.localeCompare(b.title);
+            case "dueDate":
+              return (
+                direction *
+                (new Date(a.dueDate || 0).getTime() -
+                  new Date(b.dueDate || 0).getTime())
+              );
+            case "priority":
+              const priorityOrder = { High: 3, Medium: 2, Low: 1, none: 0 };
+              return (
+                direction *
+                (priorityOrder[a.priority || "none"] -
+                  priorityOrder[b.priority || "none"])
+              );
+            case "status":
+              const statusOrder = {
+                completed: 3,
+                "in progress": 2,
+                "not started": 1,
+              };
+              return (
+                direction * (statusOrder[a.status] - statusOrder[b.status])
+              );
+            default:
+              return 0;
+          }
+        });
+      }
 
       return { ...section, tasks };
     });
-  }, [project.sections, filterPriority, filterStatus, sortBy, sortDirection]);
+  }, [
+    project.sections,
+    filterPriority,
+    filterStatus,
+    sortBy,
+    sortDirection,
+    activeSort,
+  ]);
 
   if (!project) return <div>No project data</div>;
 
@@ -642,432 +714,74 @@ export function BoardView({
                                           <div
                                             ref={provided.innerRef}
                                             {...provided.draggableProps}
-                                            {...provided.dragHandleProps}
                                             className={cn(
-                                              "p-3 rounded-lg cursor-pointer group transition-colors bg-[#1a1a1a] ",
-                                              snapshot.isDragging && "shadow-lg"
+                                              snapshot.isDragging &&
+                                                "shadow-lg ring-1 ring-[#353535]"
                                             )}
-                                            onClick={() =>
-                                              handleTaskClick(task, section._id)
-                                            }
                                           >
-                                            {editingTask?.sectionId ===
-                                              section._id &&
-                                            editingTask?.taskId === task._id ? (
-                                              <div>
-                                                <Input
-                                                  autoFocus
-                                                  placeholder="Task name"
-                                                  value={
-                                                    newTaskData[section._id]
-                                                      ?.title || ""
-                                                  }
-                                                  onChange={(e) =>
-                                                    setNewTaskData((prev) => ({
-                                                      ...prev,
-                                                      [section._id]: {
-                                                        ...prev[section._id],
-                                                        title: e.target.value,
-                                                      },
-                                                    }))
-                                                  }
-                                                  onKeyDown={(e) =>
-                                                    handleKeyDown(
-                                                      e,
-                                                      section._id,
-                                                      task._id
-                                                    )
-                                                  }
-                                                  className="bg-[#353535] border-0 focus-visible:ring-1 focus-visible:ring-neutral-500 text-white placeholder:text-neutral-400 mb-2"
-                                                />
-                                                <div className="flex items-center space-x-1">
-                                                  <div className="flex items-center bg-[#353535] rounded-md h-7 px-2 min-w-[90px]">
-                                                    <User2 className="h-3.5 w-3.5 text-neutral-400 mr-1.5" />
-                                                    <Select
-                                                      value={
-                                                        newTaskData[section._id]
-                                                          ?.assignee || ""
-                                                      }
-                                                      onValueChange={(value) =>
-                                                        setNewTaskData(
-                                                          (prev) => ({
-                                                            ...prev,
-                                                            [section._id]: {
-                                                              ...prev[
-                                                                section._id
-                                                              ],
-                                                              assignee:
-                                                                value || null,
-                                                            },
-                                                          })
-                                                        )
-                                                      }
-                                                    >
-                                                      <SelectTrigger className="border-0 p-0 h-auto bg-transparent w-full">
-                                                        <span className="text-xs truncate text-white">
-                                                          {newTaskData[
-                                                            section._id
-                                                          ]?.assignee ||
-                                                            "Assign"}
-                                                        </span>
-                                                      </SelectTrigger>
-                                                      <SelectContent className="bg-[#353535] border-[#1a1a1a]">
-                                                        <SelectItem
-                                                          value="CX"
-                                                          className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                                        >
-                                                          CX
-                                                        </SelectItem>
-                                                        <SelectItem
-                                                          value="JD"
-                                                          className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                                        >
-                                                          JD
-                                                        </SelectItem>
-                                                        <SelectItem
-                                                          value="Unassigned"
-                                                          className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                                        >
-                                                          Unassigned
-                                                        </SelectItem>
-                                                      </SelectContent>
-                                                    </Select>
-                                                  </div>
-                                                  <div className="flex items-center bg-[#353535] rounded-md h-7 px-2 min-w-[110px]">
-                                                    <Calendar className="h-3.5 w-3.5 text-neutral-400 mr-1.5" />
-                                                    <div className="relative w-full">
-                                                      <input
-                                                        type="date"
-                                                        value={
-                                                          newTaskData[
-                                                            section._id
-                                                          ]?.dueDate || ""
-                                                        }
-                                                        onChange={(e) =>
-                                                          setNewTaskData(
-                                                            (prev) => ({
-                                                              ...prev,
-                                                              [section._id]: {
-                                                                ...prev[
-                                                                  section._id
-                                                                ],
-                                                                dueDate:
-                                                                  e.target
-                                                                    .value,
-                                                              },
-                                                            })
-                                                          )
-                                                        }
-                                                        className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark]"
-                                                        onKeyDown={(e) =>
-                                                          handleKeyDown(
-                                                            e,
-                                                            section._id,
-                                                            task._id
-                                                          )
-                                                        }
-                                                      />
-                                                      <span className="text-xs truncate text-neutral-400">
-                                                        {newTaskData[
-                                                          section._id
-                                                        ]?.dueDate
-                                                          ? new Date(
-                                                              newTaskData[
-                                                                section._id
-                                                              ].dueDate
-                                                            ).toLocaleDateString(
-                                                              "en-US",
-                                                              {
-                                                                month: "short",
-                                                                day: "numeric",
-                                                                year: "numeric",
-                                                              }
-                                                            )
-                                                          : "Due date"}
-                                                      </span>
-                                                    </div>
-                                                  </div>
-                                                  <div className="flex items-center bg-[#353535] rounded-md h-7 px-2 min-w-[90px]">
-                                                    <Select
-                                                      value={
-                                                        newTaskData[section._id]
-                                                          ?.priority || "none"
-                                                      }
-                                                      onValueChange={(value) =>
-                                                        setNewTaskData(
-                                                          (prev) => ({
-                                                            ...prev,
-                                                            [section._id]: {
-                                                              ...prev[
-                                                                section._id
-                                                              ],
-                                                              priority:
-                                                                value as Task["priority"],
-                                                            },
-                                                          })
-                                                        )
-                                                      }
-                                                    >
-                                                      <SelectTrigger className="border-0 p-0 h-auto bg-transparent w-full">
-                                                        <span className="text-xs truncate text-white">
-                                                          {newTaskData[
-                                                            section._id
-                                                          ]?.priority ||
-                                                            "Priority"}
-                                                        </span>
-                                                      </SelectTrigger>
-                                                      <SelectContent className="bg-[#353535] border-[#1a1a1a]">
-                                                        <SelectItem
-                                                          value="High"
-                                                          className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                                        >
-                                                          High
-                                                        </SelectItem>
-                                                        <SelectItem
-                                                          value="Medium"
-                                                          className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                                        >
-                                                          Medium
-                                                        </SelectItem>
-                                                        <SelectItem
-                                                          value="Low"
-                                                          className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                                        >
-                                                          Low
-                                                        </SelectItem>
-                                                        <SelectItem
-                                                          value="none"
-                                                          className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                                        >
-                                                          None
-                                                        </SelectItem>
-                                                      </SelectContent>
-                                                    </Select>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              <div className="flex flex-col">
-                                                <div className="flex items-start gap-3">
-                                                  <div
-                                                    {...provided.dragHandleProps}
-                                                    className="cursor-grab active:cursor-grabbing"
-                                                  >
-                                                    <GripVertical className="w-4 h-4 text-neutral-500 hover:text-neutral-400" />
-                                                  </div>
-                                                  <div className="flex-1 min-w-0">
-                                                    <p className="text-neutral-200 text-sm mb-2">
-                                                      {task.title}
-                                                    </p>
-
-                                                    <div className="flex items-center justify-between">
-                                                      <div className="flex items-center gap-2">
-                                                        {task.assignee ? (
-                                                          <div className="h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center text-white text-xs">
-                                                            {task.assignee}
-                                                          </div>
-                                                        ) : null}
-                                                        {task.dueDate && (
-                                                          <span className="text-xs text-neutral-400">
-                                                            {new Date(
-                                                              task.dueDate
-                                                            ).toLocaleDateString(
-                                                              "en-US",
-                                                              {
-                                                                month: "short",
-                                                                day: "numeric",
-                                                                year: "numeric",
-                                                              }
-                                                            )}
-                                                          </span>
-                                                        )}
-                                                        {task.priority && (
-                                                          <span
-                                                            className={cn(
-                                                              "px-2 py-0.5 text-xs rounded",
-                                                              task.priority ===
-                                                                "High"
-                                                                ? "bg-red-500/20 text-red-300"
-                                                                : task.priority ===
-                                                                  "Medium"
-                                                                ? "bg-amber-500/20 text-amber-300"
-                                                                : "bg-blue-500/20 text-blue-300"
-                                                            )}
-                                                          >
-                                                            {task.priority}
-                                                          </span>
-                                                        )}
-                                                      </div>
-
-                                                      {/* Subtask counter badge - only show if there are subtasks */}
-                                                      {task.subtasks &&
-                                                        task.subtasks.length >
-                                                          0 && (
-                                                          <div className="inline-flex items-center gap-1 text-xs bg-[#2f2d45] text-neutral-300 rounded px-2 py-1">
-                                                            <CheckSquare className="h-3 w-3 text-neutral-400" />
-                                                            <span>
-                                                              {
-                                                                task.subtasks
-                                                                  .length
-                                                              }
-                                                            </span>
-                                                          </div>
-                                                        )}
-                                                    </div>
-                                                  </div>
-                                                  <DropdownMenu>
-                                                    <DropdownMenuTrigger
-                                                      asChild
-                                                    >
-                                                      <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-neutral-400 hover:text-neutral-300"
-                                                      >
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                      </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent
-                                                      align="end"
-                                                      side="right"
-                                                      className="w-40 bg-[#1a1a1a] border-[#262626]"
-                                                    >
-                                                      <DropdownMenuItem
-                                                        className="text-white hover:bg-[#262626] cursor-pointer"
-                                                        onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          handleEditTask(
-                                                            section._id,
-                                                            task._id
-                                                          );
-                                                        }}
-                                                      >
-                                                        <Pencil className="h-4 w-4 mr-2" />
-                                                        Edit
-                                                      </DropdownMenuItem>
-                                                      <DropdownMenuItem
-                                                        className="text-white hover:bg-[#262626] cursor-pointer"
-                                                        onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          handleDuplicateTask(
-                                                            section._id,
-                                                            task._id
-                                                          );
-                                                        }}
-                                                      >
-                                                        <Copy className="h-4 w-4 mr-2" />
-                                                        Duplicate
-                                                      </DropdownMenuItem>
-                                                      <DropdownMenuSub>
-                                                        <DropdownMenuSubTrigger
-                                                          className="text-white hover:bg-[#262626] cursor-pointer"
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            e.preventDefault();
-                                                          }}
-                                                        >
-                                                          <ArrowRight className="h-4 w-4 mr-2" />
-                                                          Move to
-                                                        </DropdownMenuSubTrigger>
-                                                        <DropdownMenuSubContent
-                                                          className="bg-[#1a1a1a] border-[#262626]"
-                                                          alignOffset={-5}
-                                                          side="right"
-                                                        >
-                                                          {project.sections
-                                                            .filter(
-                                                              (s) =>
-                                                                s._id !==
-                                                                section._id
-                                                            ) // Don't show current section
-                                                            .map(
-                                                              (
-                                                                targetSection
-                                                              ) => (
-                                                                <DropdownMenuItem
-                                                                  key={
-                                                                    targetSection._id
-                                                                  }
-                                                                  className="text-white hover:bg-[#262626] cursor-pointer"
-                                                                  onClick={(
-                                                                    e
-                                                                  ) => {
-                                                                    e.stopPropagation();
-                                                                    // Calculate new order (append to end of target section)
-                                                                    const newOrder =
-                                                                      targetSection
-                                                                        .tasks
-                                                                        .length;
-                                                                    // Move task using onDragEnd
-                                                                    onDragEnd({
-                                                                      destination:
-                                                                        {
-                                                                          droppableId:
-                                                                            targetSection._id,
-                                                                          index:
-                                                                            newOrder,
-                                                                        },
-                                                                      source: {
-                                                                        droppableId:
-                                                                          section._id,
-                                                                        index:
-                                                                          section.tasks.findIndex(
-                                                                            (
-                                                                              t
-                                                                            ) =>
-                                                                              t._id ===
-                                                                              task._id
-                                                                          ),
-                                                                      },
-                                                                      draggableId:
-                                                                        task._id,
-                                                                      type: "task",
-                                                                      mode: "FLUID",
-                                                                      reason:
-                                                                        "DROP",
-                                                                    });
-                                                                  }}
-                                                                >
-                                                                  {
-                                                                    targetSection.title
-                                                                  }
-                                                                </DropdownMenuItem>
-                                                              )
-                                                            )}
-                                                        </DropdownMenuSubContent>
-                                                      </DropdownMenuSub>
-                                                      <DropdownMenuItem
-                                                        className="text-white hover:bg-[#262626] cursor-pointer text-red-400 hover:text-red-400"
-                                                        onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          deleteTask(
-                                                            section._id,
-                                                            task._id
-                                                          );
-                                                        }}
-                                                      >
-                                                        <Trash2 className="h-4 w-4 mr-2" />
-                                                        Delete
-                                                      </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                  </DropdownMenu>
-                                                </div>
-                                              </div>
-                                            )}
+                                            <TaskCard
+                                              task={task}
+                                              sectionId={section._id}
+                                              onEdit={handleEditTask}
+                                              onUpdate={handleUpdateTask}
+                                              onCancel={() => {
+                                                setEditingTask(null);
+                                                handleCancelCreate(section._id);
+                                              }}
+                                              isEditing={
+                                                editingTask?.sectionId ===
+                                                  section._id &&
+                                                editingTask?.taskId === task._id
+                                              }
+                                              taskData={
+                                                newTaskData[section._id] || {}
+                                              }
+                                              setTaskData={(data) =>
+                                                setNewTaskData((prev) => ({
+                                                  ...prev,
+                                                  [section._id]: {
+                                                    ...data,
+                                                    isCreating: false,
+                                                  },
+                                                }))
+                                              }
+                                              getAssigneeName={getAssigneeName}
+                                              projectMembers={projectMembers}
+                                              handleKeyDown={handleKeyDown}
+                                              dragHandleProps={
+                                                provided.dragHandleProps
+                                              }
+                                              onDuplicate={handleDuplicateTask}
+                                              onDelete={handleDeleteTask}
+                                              onMoveTask={handleMoveTask}
+                                              projectSections={project.sections}
+                                              onTaskClick={handleTaskClick}
+                                            />
                                           </div>
                                         )}
                                       </Draggable>
                                     ))}
                                     {provided.placeholder}
-                                    {newTaskData[section._id]?.isCreating ? (
-                                      <div
-                                        key={`new-task-form-${section._id}`}
-                                        className="p-3 rounded-lg bg-[#1a1a1a]"
-                                      >
+                                    <Button
+                                      key={`add-task-button-${section._id}`}
+                                      variant="ghost"
+                                      className="w-full justify-start text-neutral-500 hover:text-neutral-400 hover:bg-[#353535]"
+                                      onClick={() =>
+                                        handleCreateTask(section._id)
+                                      }
+                                    >
+                                      <Plus className="h-4 w-4 mr-2" />
+                                      Add task
+                                    </Button>
+                                    {newTaskData[section._id]?.isCreating && (
+                                      <div className="p-3 rounded-lg bg-[#1a1a1a]">
                                         <Input
                                           autoFocus
                                           placeholder="Task name"
-                                          value={newTaskData[section._id].title}
+                                          value={
+                                            newTaskData[section._id]?.title ||
+                                            ""
+                                          }
                                           onChange={(e) =>
                                             setNewTaskData((prev) => ({
                                               ...prev,
@@ -1080,59 +794,57 @@ export function BoardView({
                                           onKeyDown={(e) =>
                                             handleKeyDown(e, section._id)
                                           }
-                                          className="mb-2 bg-[#353535] border-0 focus-visible:ring-1 focus-visible:ring-neutral-500 text-white placeholder:text-neutral-400"
+                                          className="bg-[#353535] border-0 focus-visible:ring-1 focus-visible:ring-neutral-500 text-white placeholder:text-neutral-400 mb-2"
                                         />
-                                        <div className="flex items-center gap-2 text-neutral-400">
-                                          <Select
-                                            value={
-                                              newTaskData[section._id]
-                                                .assignee || ""
-                                            }
-                                            onValueChange={(value) =>
-                                              setNewTaskData((prev) => ({
-                                                ...prev,
-                                                [section._id]: {
-                                                  ...prev[section._id],
-                                                  assignee: value || null,
-                                                },
-                                              }))
-                                            }
-                                          >
-                                            <SelectTrigger className="h-7 w-7 px-0 border-0 bg-transparent hover:bg-[#353535] hover:text-neutral-300">
-                                              <User2
-                                                className={cn(
-                                                  "h-4 w-4",
-                                                  newTaskData[section._id]
-                                                    .assignee
-                                                    ? "text-violet-500"
-                                                    : "text-neutral-400"
+                                        <div className="flex items-center space-x-1">
+                                          <div className="flex items-center bg-[#353535] rounded-md h-7 px-2 min-w-[90px]">
+                                            <User2 className="h-3.5 w-3.5 text-neutral-400 mr-1.5" />
+                                            <Select
+                                              value={
+                                                newTaskData[section._id]
+                                                  ?.assignee || ""
+                                              }
+                                              onValueChange={(value) =>
+                                                setNewTaskData((prev) => ({
+                                                  ...prev,
+                                                  [section._id]: {
+                                                    ...prev[section._id],
+                                                    assignee:
+                                                      value === "unassigned"
+                                                        ? null
+                                                        : value,
+                                                  },
+                                                }))
+                                              }
+                                            >
+                                              <SelectTrigger className="border-0 p-0 h-auto bg-transparent w-full">
+                                                <span className="text-xs truncate text-white">
+                                                  {newTaskData[section._id]
+                                                    ?.assignee || "Assign"}
+                                                </span>
+                                              </SelectTrigger>
+                                              <SelectContent className="bg-[#353535] border-[#1a1a1a]">
+                                                {projectMembers.map(
+                                                  (member) => (
+                                                    <SelectItem
+                                                      key={member._id}
+                                                      value={member._id}
+                                                      className="text-white hover:bg-[#2f2d45] hover:text-white"
+                                                    >
+                                                      {member.fullName ||
+                                                        member.email}
+                                                    </SelectItem>
+                                                  )
                                                 )}
-                                              />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-[#353535] border-[#1a1a1a]">
-                                              <SelectItem
-                                                key="cx"
-                                                value="CX"
-                                                className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                              >
-                                                CX
-                                              </SelectItem>
-                                              <SelectItem
-                                                key="jd"
-                                                value="JD"
-                                                className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                              >
-                                                JD
-                                              </SelectItem>
-                                              <SelectItem
-                                                key="unassigned"
-                                                value="Unassigned"
-                                                className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                              >
-                                                Unassigned
-                                              </SelectItem>
-                                            </SelectContent>
-                                          </Select>
+                                                <SelectItem
+                                                  value="unassigned"
+                                                  className="text-white hover:bg-[#2f2d45] hover:text-white"
+                                                >
+                                                  Unassigned
+                                                </SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
                                           <div className="flex items-center bg-[#353535] rounded-md h-7 px-2 min-w-[110px]">
                                             <Calendar className="h-3.5 w-3.5 text-neutral-400 mr-1.5" />
                                             <div className="relative w-full">
@@ -1140,7 +852,7 @@ export function BoardView({
                                                 type="date"
                                                 value={
                                                   newTaskData[section._id]
-                                                    .dueDate
+                                                    ?.dueDate || ""
                                                 }
                                                 onChange={(e) =>
                                                   setNewTaskData((prev) => ({
@@ -1152,10 +864,13 @@ export function BoardView({
                                                   }))
                                                 }
                                                 className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark]"
+                                                onKeyDown={(e) =>
+                                                  handleKeyDown(e, section._id)
+                                                }
                                               />
                                               <span className="text-xs truncate text-neutral-400">
                                                 {newTaskData[section._id]
-                                                  .dueDate
+                                                  ?.dueDate
                                                   ? new Date(
                                                       newTaskData[
                                                         section._id
@@ -1172,83 +887,78 @@ export function BoardView({
                                               </span>
                                             </div>
                                           </div>
-                                          <Select
-                                            value={
-                                              newTaskData[section._id]
-                                                .priority || "none"
-                                            }
-                                            onValueChange={(value) =>
-                                              setNewTaskData((prev) => ({
-                                                ...prev,
-                                                [section._id]: {
-                                                  ...prev[section._id],
-                                                  priority:
-                                                    value as Task["priority"],
-                                                },
-                                              }))
-                                            }
-                                          >
-                                            <SelectTrigger className="h-7 px-2 border-0 bg-transparent hover:bg-[#353535] hover:text-neutral-300">
-                                              <span className="text-sm text-white">
-                                                {newTaskData[section._id]
-                                                  .priority || "Priority"}
-                                              </span>
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-[#353535] border-[#1a1a1a]">
-                                              <SelectItem
-                                                key="high"
-                                                value="High"
-                                                className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                              >
-                                                High
-                                              </SelectItem>
-                                              <SelectItem
-                                                key="medium"
-                                                value="Medium"
-                                                className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                              >
-                                                Medium
-                                              </SelectItem>
-                                              <SelectItem
-                                                key="low"
-                                                value="Low"
-                                                className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                              >
-                                                Low
-                                              </SelectItem>
-                                              <SelectItem
-                                                key="none"
-                                                value="none"
-                                                className="text-white hover:bg-[#2f2d45] hover:text-white"
-                                              >
-                                                None
-                                              </SelectItem>
-                                            </SelectContent>
-                                          </Select>
+                                          <div className="flex items-center bg-[#353535] rounded-md h-7 px-2 min-w-[90px]">
+                                            <Select
+                                              value={
+                                                newTaskData[section._id]
+                                                  ?.priority || "none"
+                                              }
+                                              onValueChange={(value) =>
+                                                setNewTaskData((prev) => ({
+                                                  ...prev,
+                                                  [section._id]: {
+                                                    ...prev[section._id],
+                                                    priority:
+                                                      value as Task["priority"],
+                                                  },
+                                                }))
+                                              }
+                                            >
+                                              <SelectTrigger className="border-0 p-0 h-auto bg-transparent w-full">
+                                                <span className="text-xs truncate text-white">
+                                                  {newTaskData[section._id]
+                                                    ?.priority || "Priority"}
+                                                </span>
+                                              </SelectTrigger>
+                                              <SelectContent className="bg-[#353535] border-[#1a1a1a]">
+                                                <SelectItem
+                                                  value="High"
+                                                  className="text-white hover:bg-[#2f2d45] hover:text-white"
+                                                >
+                                                  High
+                                                </SelectItem>
+                                                <SelectItem
+                                                  value="Medium"
+                                                  className="text-white hover:bg-[#2f2d45] hover:text-white"
+                                                >
+                                                  Medium
+                                                </SelectItem>
+                                                <SelectItem
+                                                  value="Low"
+                                                  className="text-white hover:bg-[#2f2d45] hover:text-white"
+                                                >
+                                                  Low
+                                                </SelectItem>
+                                                <SelectItem
+                                                  value="none"
+                                                  className="text-white hover:bg-[#2f2d45] hover:text-white"
+                                                >
+                                                  None
+                                                </SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center justify-end space-x-2 mt-2">
                                           <Button
                                             variant="ghost"
                                             size="sm"
-                                            className="h-7 px-2 hover:text-neutral-300"
+                                            onClick={() =>
+                                              handleCancelCreate(section._id)
+                                            }
+                                          >
+                                            Cancel
+                                          </Button>
+                                          <Button
+                                            size="sm"
                                             onClick={() =>
                                               handleAddTask(section._id)
                                             }
                                           >
-                                            Save
+                                            Create
                                           </Button>
                                         </div>
                                       </div>
-                                    ) : (
-                                      <Button
-                                        key={`add-task-button-${section._id}`}
-                                        variant="ghost"
-                                        className="w-full justify-start text-neutral-500 hover:text-neutral-400 hover:bg-[#353535]"
-                                        onClick={() =>
-                                          handleCreateTask(section._id)
-                                        }
-                                      >
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        Add task
-                                      </Button>
                                     )}
                                   </div>
                                 )}
@@ -1279,12 +989,11 @@ export function BoardView({
       {selectedTask && (
         <TaskDetails
           task={selectedTask}
-          onClose={() => {
-            setSelectedTask(null);
-          }}
+          onClose={() => setSelectedTask(null)}
           onUpdate={handleTaskUpdate}
           onDelete={() =>
-            handleDeleteTask(selectedTask.project.id, selectedTask._id)
+            selectedTask.id &&
+            handleDeleteTask(selectedTask.project.id, selectedTask.id)
           }
         />
       )}

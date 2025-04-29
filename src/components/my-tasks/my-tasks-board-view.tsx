@@ -421,7 +421,7 @@ export function MyTasksBoardView({
                                     </div>
                                   )}
 
-                                  {task.assignee && (
+                                  {task.assignee && task.assignee !== "" && (
                                     <div className="flex items-center text-xs text-neutral-400 hover:text-neutral-300">
                                       <User2 className="h-3 w-3 mr-1" />
                                       {task.assignee}

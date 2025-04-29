@@ -10,6 +10,7 @@ import type {
   Workspace,
   AddWorkspaceMemberDto,
   UpdateWorkspaceMemberRoleDto,
+  User,
 } from "./types";
 import { type DashboardCard } from "./contexts/DashboardContext";
 import { getAuthCookie } from "./lib/cookies";
@@ -798,18 +799,88 @@ export const fetchWorkspaceById = async (
   workspaceId: string
 ): Promise<Workspace> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}`, {
-      headers: getAuthHeaders(),
-    });
+    console.log(`Fetching workspace with ID: ${workspaceId}`);
+    const headers = getAuthHeaders();
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch workspace: ${response.statusText}`);
+    // Debug log the authorization header
+    console.log("Authorization header present:", !!headers.Authorization);
+
+    if (!headers.Authorization) {
+      console.error("No authorization token found for workspace request");
+      throw new Error("401 Unauthorized: Missing authentication token");
     }
 
-    return await response.json();
+    const response = await fetch(`${API_BASE_URL}/workspaces/${workspaceId}`, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    });
+
+    console.log(
+      "Workspace fetch response:",
+      response.status,
+      response.statusText
+    );
+
+    if (!response.ok) {
+      // Try to get more information from the error response
+      let errorDetails = "";
+      try {
+        const errorData = await response.json();
+        errorDetails = errorData.message || errorData.error || "";
+      } catch (e) {
+        // If we can't parse JSON, try to get text
+        try {
+          errorDetails = await response.text();
+        } catch (textError) {
+          // If we can't get text either, use status text
+          errorDetails = response.statusText;
+        }
+      }
+
+      const errorMessage = `${response.status} ${response.statusText}${
+        errorDetails ? `: ${errorDetails}` : ""
+      }`;
+      console.error(`Failed to fetch workspace: ${errorMessage}`);
+
+      throw new Error(`Failed to fetch workspace: ${errorMessage}`);
+    }
+
+    const workspace = await response.json();
+    return workspace;
   } catch (error) {
     console.error(`Error fetching workspace ${workspaceId}:`, error);
     throw error;
+  }
+};
+
+export const fetchWorkspaceMembers = async (
+  workspaceId: string
+): Promise<User[]> => {
+  try {
+    // First fetch the workspace to get the member IDs
+    const workspace = await fetchWorkspaceById(workspaceId);
+
+    // Extract member user IDs from the workspace
+    // According to the type definition, workspace.members is an array of objects with userId property
+    const memberIds = workspace.members.map((member) => member.userId);
+
+    // Also include the workspace owner
+    if (workspace.owner && !memberIds.includes(workspace.owner)) {
+      memberIds.push(workspace.owner);
+    }
+
+    // Fetch user details for each member
+    const memberPromises = memberIds.map((userId) => fetchUserById(userId));
+    const members = await Promise.all(memberPromises);
+
+    return members;
+  } catch (error) {
+    console.error(
+      `Error fetching workspace members for ${workspaceId}:`,
+      error
+    );
+    return []; // Return empty array on error
   }
 };
 
@@ -1177,7 +1248,7 @@ export const updateBackgroundColor = async (backgroundColor: string) => {
     const response = await fetch(
       `${API_BASE_URL}/preferences/background-color`,
       {
-        method: "PUT",
+        method: "PATCH",
         headers: getAuthHeaders(),
         body: JSON.stringify({ backgroundColor }),
       }
@@ -1364,5 +1435,30 @@ export const updateDashboardLayout = async (
   } catch (error: unknown) {
     console.error("Error updating dashboard layout:", error);
     throw error;
+  }
+};
+
+export const fetchProjectMembers = async (
+  projectId: string
+): Promise<User[]> => {
+  try {
+    // First get the project to find member IDs
+    const project = await fetchProject(projectId);
+
+    if (!project || !project.roles || project.roles.length === 0) {
+      return [];
+    }
+
+    // Extract user IDs from project roles
+    const userIds = project.roles.map((role) => role.userId);
+
+    // Fetch user details for each member
+    const userPromises = userIds.map((userId) => fetchUserById(userId));
+    const users = await Promise.all(userPromises);
+
+    return users.filter((user) => !!user); // Remove any null results
+  } catch (error) {
+    console.error("Error fetching project members:", error);
+    return [];
   }
 };
