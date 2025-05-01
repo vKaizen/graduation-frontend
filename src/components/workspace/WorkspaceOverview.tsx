@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Plus, Users, List } from "lucide-react";
+import { ChevronDown, Plus, List } from "lucide-react";
 import Link from "next/link";
 import { fetchWorkspaceMembers, fetchProjectsByWorkspace } from "@/api-service";
 import type { Workspace, User, Project } from "@/types";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { MemberInviteModal } from "./MemberInviteModal";
+import { TestDialog } from "./TestDialog";
+import { TestButton } from "./TestButton";
 
 interface WorkspaceOverviewProps {
   workspace: Workspace;
@@ -18,28 +21,28 @@ export function WorkspaceOverview({ workspace }: WorkspaceOverviewProps) {
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
+  const loadData = async () => {
+    try {
+      setIsLoadingMembers(true);
+      setIsLoadingProjects(true);
+
+      // Fetch members and projects in parallel
+      const [membersData, projectsData] = await Promise.all([
+        fetchWorkspaceMembers(workspace._id),
+        fetchProjectsByWorkspace(workspace._id),
+      ]);
+
+      setMembers(membersData);
+      setProjects(projectsData);
+    } catch (error) {
+      console.error("Failed to load workspace data:", error);
+    } finally {
+      setIsLoadingMembers(false);
+      setIsLoadingProjects(false);
+    }
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoadingMembers(true);
-        setIsLoadingProjects(true);
-
-        // Fetch members and projects in parallel
-        const [membersData, projectsData] = await Promise.all([
-          fetchWorkspaceMembers(workspace._id),
-          fetchProjectsByWorkspace(workspace._id),
-        ]);
-
-        setMembers(membersData);
-        setProjects(projectsData);
-      } catch (error) {
-        console.error("Failed to load workspace data:", error);
-      } finally {
-        setIsLoadingMembers(false);
-        setIsLoadingProjects(false);
-      }
-    };
-
     loadData();
   }, [workspace._id]);
 
@@ -122,7 +125,8 @@ export function WorkspaceOverview({ workspace }: WorkspaceOverviewProps) {
                 variant="ghost"
                 className="text-neutral-400 hover:text-white"
               >
-                View all 1 <ChevronDown className="ml-1 h-4 w-4" />
+                View all {members.length}{" "}
+                <ChevronDown className="ml-1 h-4 w-4" />
               </Button>
             </div>
 
@@ -147,9 +151,18 @@ export function WorkspaceOverview({ workspace }: WorkspaceOverviewProps) {
                     </AvatarFallback>
                   </Avatar>
                 ))}
-                <Button className="h-10 w-10 rounded-full bg-neutral-800 hover:bg-neutral-700 p-0">
-                  <Plus className="h-4 w-4 text-white" />
-                </Button>
+
+                <MemberInviteModal
+                  workspaceId={workspace._id}
+                  projects={projects.map((p) => ({ id: p._id, name: p.name }))}
+                  onInviteSent={loadData}
+                />
+
+                {/* Test dialog to see if dialogs work in general */}
+                <TestDialog />
+
+                {/* Test button to see if basic button clicks work */}
+                <TestButton />
               </div>
             )}
           </div>
@@ -169,7 +182,7 @@ export function WorkspaceOverview({ workspace }: WorkspaceOverviewProps) {
 
             <div className="bg-neutral-800 rounded-lg p-6">
               <h3 className="text-white font-medium mb-2">
-                This team hasn't created any goals yet
+                This team hasn&apos;t created any goals yet
               </h3>
               <p className="text-neutral-400 text-sm mb-4">
                 Add a goal so the team can see what you hope to achieve.

@@ -185,21 +185,49 @@ export function BoardView({
     }
   };
 
-  const handleUpdateTask = (sectionId: string, taskId: string) => {
-    const taskData = newTaskData[sectionId];
-    if (taskData) {
-      updateTask(sectionId, taskId, {
-        title: taskData.title,
-        assignee: taskData.assignee,
-        dueDate: taskData.dueDate,
-        priority: taskData.priority,
-        status: taskData.status,
-        budget: taskData.budget,
-        tags: taskData.tags,
-      });
-      setEditingTask(null);
-      handleCancelCreate(sectionId);
+  const handleUpdateTask = (
+    taskId: string,
+    updates: Partial<TaskDetailsType>
+  ) => {
+    // Find which section contains this task
+    let taskSectionId: string | null = null;
+
+    for (const section of project.sections) {
+      const taskExists = section.tasks.some((t) => t.id === taskId);
+      if (taskExists) {
+        taskSectionId = section.id;
+        break;
+      }
     }
+
+    if (taskSectionId) {
+      // Get current user information from localStorage
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+      // Extract only the properties that exist in the Task type
+      const taskUpdates: Partial<Task> = {
+        title: updates.title,
+        assignee: updates.assignee,
+        dueDate: updates.dueDate,
+        priority: updates.priority,
+        description: updates.description,
+        subtasks: updates.subtasks,
+        status: updates.status,
+        budget: updates.budget,
+        tags: updates.tags,
+        // Add updater information
+        updatedBy: user.userId || user._id,
+        updatedByName: user.fullName || user.email || "Unknown User",
+      };
+
+      console.log("Updating task with user info:", taskUpdates);
+
+      // Update the task in the project
+      updateTask(taskSectionId, taskId, taskUpdates);
+    }
+
+    // Update the selected task
+    setSelectedTask((prev) => (prev ? { ...prev, ...updates } : null));
   };
 
   const handleKeyDown = (
@@ -209,7 +237,15 @@ export function BoardView({
   ) => {
     if (e.key === "Enter") {
       if (taskId) {
-        handleUpdateTask(sectionId, taskId);
+        handleUpdateTask(taskId, {
+          title: selectedTask?.title || "",
+          assignee: selectedTask?.assignee || null,
+          dueDate: selectedTask?.dueDate || "",
+          priority: selectedTask?.priority || undefined,
+          status: selectedTask?.status || "not started",
+          budget: selectedTask?.budget || 0,
+          tags: selectedTask?.tags || [],
+        });
       } else {
         handleAddTask(sectionId);
       }
@@ -276,44 +312,6 @@ export function BoardView({
     };
 
     setSelectedTask(taskDetails);
-  };
-
-  // Update the handleTaskUpdate function to ensure changes are reflected in the board view
-  const handleTaskUpdate = (
-    taskId: string,
-    updates: Partial<TaskDetailsType>
-  ) => {
-    // Find which section contains this task
-    let taskSectionId: string | null = null;
-
-    for (const section of project.sections) {
-      const taskExists = section.tasks.some((t) => t.id === taskId);
-      if (taskExists) {
-        taskSectionId = section.id;
-        break;
-      }
-    }
-
-    if (taskSectionId) {
-      // Extract only the properties that exist in the Task type
-      const taskUpdates: Partial<Task> = {
-        title: updates.title,
-        assignee: updates.assignee,
-        dueDate: updates.dueDate,
-        priority: updates.priority,
-        description: updates.description,
-        subtasks: updates.subtasks,
-        status: updates.status,
-        budget: updates.budget,
-        tags: updates.tags,
-      };
-
-      // Update the task in the project
-      updateTask(taskSectionId, taskId, taskUpdates);
-    }
-
-    // Update the selected task
-    setSelectedTask((prev) => (prev ? { ...prev, ...updates } : null));
   };
 
   const handleDuplicateTask = (sectionId: string, taskId: string) => {
@@ -990,7 +988,7 @@ export function BoardView({
         <TaskDetails
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
-          onUpdate={handleTaskUpdate}
+          onUpdate={handleUpdateTask}
           onDelete={() =>
             selectedTask.id &&
             handleDeleteTask(selectedTask.project.id, selectedTask.id)

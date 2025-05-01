@@ -20,7 +20,7 @@ export function WorkspaceTabs({ workspaceId }: WorkspaceTabsProps) {
   ];
 
   return (
-    <div className="border-b border-[#252525] px-6 bg-[#1a1a1a]">
+    <div className="border-b border-[#252525] px-6 bg-[#000000]">
       <nav className="flex space-x-4">
         {tabs.map((tab) => {
           // Check if the pathname includes the tab's href path
@@ -29,10 +29,10 @@ export function WorkspaceTabs({ workspaceId }: WorkspaceTabsProps) {
             <Link
               key={tab.href}
               href={tab.href}
-              className={`py-3 px-1 border-b-2 font-medium text-sm ${
+              className={`py-3 px-1 rounded-md border-b-2 font-medium text-sm ${
                 isActive
                   ? "border-[#4573D2] text-white"
-                  : "border-transparent text-[#a1a1a1] hover:text-white hover:border-[#353535]"
+                  : "border-transparent text-[#a1a1a1] hover:text-white hover:border-[#353535] hover:bg-[#111111]"
               }`}
             >
               {tab.label}

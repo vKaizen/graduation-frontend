@@ -30,7 +30,7 @@ const getAuthHeaders = (): HeadersInit => {
     console.log("Auth token found, length:", token.length);
   }
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
@@ -204,13 +204,15 @@ export const fetchUserById = async (userId: string): Promise<any> => {
       console.warn(`Unknown error type when fetching user ${userId}:`, error);
     }
 
-    // Try to get user info from the JWT token
-    console.log("🔍 API: Attempting to extract user info from JWT token");
+    // If this is the current user, try to get user info from the JWT token
+    console.log("🔍 API: Checking if this is the current user");
     try {
       const token = getAuthCookie();
       if (token) {
         const decoded: {
           sub?: string;
+          id?: string;
+          userId?: string;
           username?: string;
           name?: string;
           fullName?: string;
@@ -221,31 +223,41 @@ export const fetchUserById = async (userId: string): Promise<any> => {
           JSON.stringify(decoded)
         );
 
-        // Extract any potentially useful identity fields from the token
-        const email = decoded.email || decoded.username || "Your Account";
+        // Extract current user ID from token
+        const currentUserId = decoded.sub || decoded.id || decoded.userId;
+        console.log(`🔍 API: Current user ID from token: ${currentUserId}`);
 
-        // Use email as fallback for fullName if no name is present
-        const fallbackUser = {
-          _id: userId,
-          email: email,
-          fullName: decoded.fullName || decoded.name || email,
-        };
-        console.log(
-          "🔍 API: Using fallback user data from token:",
-          JSON.stringify(fallbackUser)
-        );
-        return fallbackUser;
+        // Only use token info if the requested user is the current user
+        if (currentUserId === userId) {
+          console.log(
+            "🔍 API: Requested user is current user, using token info"
+          );
+          // Extract any potentially useful identity fields from the token
+          const email = decoded.email || decoded.username || "Your Account";
+
+          // Use email as fallback for fullName if no name is present
+          const fallbackUser = {
+            _id: userId,
+            email: email,
+            fullName: decoded.fullName || decoded.name || email,
+          };
+          console.log(
+            "🔍 API: Using fallback user data from token:",
+            JSON.stringify(fallbackUser)
+          );
+          return fallbackUser;
+        }
       }
     } catch (tokenErr) {
       console.warn("Error extracting user info from token:", tokenErr);
     }
 
-    // Return fallback user data if everything else fails
-    console.log("🔍 API: Using hardcoded fallback user data");
+    // Return a generic placeholder for non-current users
+    console.log("🔍 API: Using generic placeholder for user");
     return {
       _id: userId,
-      email: "Your Account",
-      fullName: "User",
+      email: `user-${userId.substring(0, 6)}@example.com`,
+      fullName: `User ${userId.substring(0, 6)}`,
     };
   }
 };
@@ -854,6 +866,71 @@ export const fetchWorkspaceById = async (
   }
 };
 
+// Utility function for batch fetching users by ID
+const batchFetchUsers = async (userIds: string[]): Promise<User[]> => {
+  if (!userIds || userIds.length === 0) {
+    return [];
+  }
+
+  try {
+    // Clean up IDs - ensure they're strings and unique
+    const cleanIds = [
+      ...new Set(
+        userIds.map((id) => {
+          if (typeof id === "object" && id !== null) {
+            const objId = id as any;
+            return objId._id || String(objId);
+          }
+          return id;
+        })
+      ),
+    ];
+
+    console.log(`Batch fetching ${cleanIds.length} users`);
+
+    // Try batch endpoint first
+    const response = await fetch(`${API_BASE_URL}/users/batch`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ userIds: cleanIds }),
+    });
+
+    if (response.ok) {
+      const users = await response.json();
+      console.log(`Successfully batch fetched ${users.length} users`);
+      return users;
+    }
+
+    console.log(
+      "Batch endpoint failed or not available, falling back to individual requests"
+    );
+
+    // Fallback to individual requests if batch endpoint fails or isn't available
+    const userPromises = cleanIds.map((userId) =>
+      fetch(`${API_BASE_URL}/users/${userId}`, { headers: getAuthHeaders() })
+        .then((res) => (res.ok ? res.json() : null))
+        .catch((err) => {
+          if (err instanceof Error) {
+            console.warn(`Failed to fetch user ${userId}:`, err.message);
+          } else {
+            console.warn(`Failed to fetch user ${userId}:`, String(err));
+          }
+          return null;
+        })
+    );
+
+    const results = await Promise.all(userPromises);
+    return results.filter(Boolean) as User[];
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error("Error in batch fetching users:", err.message);
+    } else {
+      console.error("Error in batch fetching users:", String(err));
+    }
+    return [];
+  }
+};
+
 export const fetchWorkspaceMembers = async (
   workspaceId: string
 ): Promise<User[]> => {
@@ -862,24 +939,45 @@ export const fetchWorkspaceMembers = async (
     const workspace = await fetchWorkspaceById(workspaceId);
 
     // Extract member user IDs from the workspace
-    // According to the type definition, workspace.members is an array of objects with userId property
-    const memberIds = workspace.members.map((member) => member.userId);
+    const memberIds = Array.isArray(workspace.members)
+      ? workspace.members.map((member) => {
+          // Handle both object format and string format
+          if (typeof member === "object" && member !== null) {
+            return member.userId;
+          }
+          return member; // Handle old format where members are stored as strings
+        })
+      : [];
 
     // Also include the workspace owner
     if (workspace.owner && !memberIds.includes(workspace.owner)) {
       memberIds.push(workspace.owner);
     }
 
-    // Fetch user details for each member
-    const memberPromises = memberIds.map((userId) => fetchUserById(userId));
-    const members = await Promise.all(memberPromises);
-
-    return members;
-  } catch (error) {
-    console.error(
-      `Error fetching workspace members for ${workspaceId}:`,
-      error
+    // Ensure unique member IDs - use a Set to remove duplicates
+    const uniqueMemberIds = [...new Set(memberIds.filter(Boolean))];
+    console.log(
+      `Fetching ${uniqueMemberIds.length} unique members for workspace ${workspaceId}`
     );
+
+    if (uniqueMemberIds.length === 0) {
+      return [];
+    }
+
+    // Use the common utility function to batch fetch users
+    return batchFetchUsers(uniqueMemberIds);
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error(
+        `Error fetching workspace members for ${workspaceId}:`,
+        err.message
+      );
+    } else {
+      console.error(
+        `Error fetching workspace members for ${workspaceId}:`,
+        String(err)
+      );
+    }
     return []; // Return empty array on error
   }
 };
@@ -1452,13 +1550,435 @@ export const fetchProjectMembers = async (
     // Extract user IDs from project roles
     const userIds = project.roles.map((role) => role.userId);
 
-    // Fetch user details for each member
-    const userPromises = userIds.map((userId) => fetchUserById(userId));
-    const users = await Promise.all(userPromises);
+    console.log(`Fetching ${userIds.length} members for project ${projectId}`);
 
-    return users.filter((user) => !!user); // Remove any null results
-  } catch (error) {
-    console.error("Error fetching project members:", error);
+    // Use the common utility function to batch fetch users
+    return batchFetchUsers(userIds);
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error("Error fetching project members:", err.message);
+    } else {
+      console.error("Error fetching project members:", String(err));
+    }
     return [];
   }
 };
+
+// --------------------------------
+// Invite Management API
+// --------------------------------
+
+export type InviteStatus = "pending" | "accepted" | "expired" | "revoked";
+
+export interface Invite {
+  id: string;
+  inviterId: string;
+  inviterName?: string;
+  inviteeId: string;
+  inviteeName?: string;
+  workspaceId: string;
+  workspaceName?: string;
+  status: InviteStatus;
+  inviteTime: string;
+  expirationTime: string;
+  inviteToken: string;
+}
+
+export interface InviteTokenValidation {
+  isValid: boolean;
+  workspace?: { id: string; name: string };
+  inviter?: { id: string; name: string };
+}
+
+export async function createInvite(
+  accessToken: string,
+  inviteeId: string,
+  workspaceId: string,
+  selectedProjects?: string[]
+): Promise<Invite> {
+  const response = await fetch(`${API_BASE_URL}/invites`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ inviteeId, workspaceId, selectedProjects }),
+  });
+
+  if (!response.ok) {
+    throw await handleApiError(response);
+  }
+
+  const data = await response.json();
+  return {
+    ...data,
+    inviteTime: data.inviteTime,
+    expirationTime: data.expirationTime,
+  };
+}
+
+export async function acceptInvite(
+  accessToken: string,
+  inviteToken: string
+): Promise<Invite> {
+  const response = await fetch(`${API_BASE_URL}/invites/accept`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ inviteToken }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to accept invitation");
+  }
+
+  const data = await response.json();
+  return {
+    ...data,
+    inviteTime: data.inviteTime,
+    expirationTime: data.expirationTime,
+  };
+}
+
+export async function getInvites(
+  accessToken: string,
+  type: "sent" | "received" = "received"
+): Promise<Invite[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/invites?type=${type}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch invites");
+    }
+
+    const data = await response.json();
+    return data.map((invite: any) => ({
+      ...invite,
+      inviteTime: invite.inviteTime,
+      expirationTime: invite.expirationTime,
+    }));
+  } catch (error) {
+    console.error("Error fetching invites:", error);
+    // Return mock data for development
+    return [
+      {
+        id: "1",
+        inviterId: "user-123",
+        inviterName: "John Doe",
+        inviteeId: "user-456",
+        inviteeName: "Current User",
+        workspaceId: "ws-789",
+        workspaceName: "Design Team",
+        status: "pending",
+        inviteTime: new Date(Date.now() - 86400000).toISOString(),
+        expirationTime: new Date(Date.now() + 86400000).toISOString(),
+        inviteToken: "invitation-token-123",
+      },
+      {
+        id: "2",
+        inviterId: "user-789",
+        inviterName: "Jane Smith",
+        inviteeId: "user-456",
+        inviteeName: "Current User",
+        workspaceId: "ws-123",
+        workspaceName: "Marketing Team",
+        status: "pending",
+        inviteTime: new Date(Date.now() - 172800000).toISOString(),
+        expirationTime: new Date(Date.now() + 86400000).toISOString(),
+        inviteToken: "invitation-token-456",
+      },
+    ];
+  }
+}
+
+export async function getInviteById(
+  accessToken: string,
+  inviteId: string
+): Promise<Invite> {
+  const response = await fetch(`${API_BASE_URL}/invites/${inviteId}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to fetch invite");
+  }
+
+  const data = await response.json();
+  return {
+    ...data,
+    inviteTime: data.inviteTime,
+    expirationTime: data.expirationTime,
+  };
+}
+
+export async function cancelInvite(
+  accessToken: string,
+  inviteId: string
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/invites/${inviteId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to cancel invite");
+  }
+}
+
+export async function validateInviteToken(
+  accessToken: string,
+  token: string
+): Promise<InviteTokenValidation> {
+  const response = await fetch(`${API_BASE_URL}/invites/validate/${token}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to validate invite token");
+  }
+
+  return await response.json();
+}
+
+// Helper function to handle API errors
+async function handleApiError(response: Response): Promise<Error> {
+  let errorMessage: string;
+  try {
+    const errorData = await response.json();
+    errorMessage = errorData.message || `API error: ${response.status}`;
+  } catch (_) {
+    errorMessage = `API error: ${response.status} ${response.statusText}`;
+  }
+  return new Error(errorMessage);
+}
+
+// Notification API interface
+export interface Notification {
+  id: string;
+  type:
+    | "invite_received"
+    | "invite_accepted"
+    | "invite_rejected"
+    | "system_message"
+    | "task_assigned"
+    | "task_completed"
+    | "comment_added"
+    | "project_status_changed"
+    | "member_added"
+    | "deadline_approaching"
+    | "task_overdue";
+  title: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+  metadata?: Record<string, string>;
+}
+
+// Fetch all notifications for the current user
+export async function fetchNotifications(): Promise<Notification[]> {
+  try {
+    console.log(
+      "Fetching notifications from:",
+      `${API_BASE_URL}/notifications`
+    );
+
+    const token = getAuthCookie();
+    console.log(
+      "Auth token exists:",
+      !!token,
+      token ? `(length: ${token.length})` : ""
+    );
+
+    const headers = getAuthHeaders();
+    console.log("Request headers:", JSON.stringify(headers));
+
+    const response = await fetch(`${API_BASE_URL}/notifications`, {
+      headers: getAuthHeaders(),
+      // Add credentials to include cookies
+      credentials: "include",
+    });
+
+    console.log(
+      "Notifications API response status:",
+      response.status,
+      response.statusText
+    );
+
+    if (!response.ok) {
+      console.error(
+        "Notifications API error:",
+        response.status,
+        response.statusText
+      );
+      throw await handleApiError(response);
+    }
+
+    // Get response as text first for debugging
+    const responseText = await response.text();
+    console.log("Raw notifications response:", responseText);
+
+    // Handle empty response
+    if (!responseText.trim()) {
+      console.log("Empty response received from notifications API");
+      return [];
+    }
+
+    // Parse the JSON
+    let notifications;
+    try {
+      notifications = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error("Failed to parse notifications response:", parseError);
+      throw new Error("Invalid response format from notifications API");
+    }
+
+    console.log("Parsed notifications:", notifications);
+
+    // Ensure the response is an array
+    if (!Array.isArray(notifications)) {
+      console.error("Notifications response is not an array:", notifications);
+
+      // If it's an object with a data property that's an array, use that
+      if (notifications && Array.isArray(notifications.data)) {
+        notifications = notifications.data;
+      } else {
+        // Otherwise return an empty array
+        return [];
+      }
+    }
+
+    // Transform data if needed to match the frontend Notification interface
+    const transformedNotifications = notifications.map((notification) => ({
+      id: notification._id || notification.id || String(Math.random()),
+      type: notification.type || "system_message",
+      title: notification.title || "Notification",
+      message: notification.message || "",
+      createdAt: notification.createdAt || new Date().toISOString(),
+      read: notification.read || false,
+      metadata: notification.metadata || {},
+    }));
+
+    console.log("Transformed notifications:", transformedNotifications);
+    return transformedNotifications;
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    throw error; // Throw the error instead of returning mock data
+  }
+}
+
+// Mark a notification as read
+export async function markNotificationAsRead(
+  notificationId: string
+): Promise<void> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/notifications/${notificationId}/read`,
+      {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      throw await handleApiError(response);
+    }
+  } catch (error) {
+    console.error(
+      `Error marking notification ${notificationId} as read:`,
+      error
+    );
+    // For now, just log the error but don't throw since we're mocking
+  }
+}
+
+// Mark all notifications as read
+export async function markAllNotificationsAsRead(): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/notifications/read-all`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw await handleApiError(response);
+    }
+  } catch (error) {
+    console.error("Error marking all notifications as read:", error);
+    // For now, just log the error but don't throw since we're mocking
+  }
+}
+
+// Clear/delete all notifications
+export async function clearAllNotifications(): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/notifications`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw await handleApiError(response);
+    }
+  } catch (error) {
+    console.error("Error clearing all notifications:", error);
+    // For now, just log the error but don't throw since we're mocking
+  }
+}
+
+// Helper function to get mock notifications for development
+function getMockNotifications(): Notification[] {
+  return [
+    {
+      id: "1",
+      type: "invite_received",
+      title: "New Workspace Invitation",
+      message: "You have been invited to join Design Team workspace",
+      createdAt: new Date(Date.now() - 3600000).toISOString(),
+      read: false,
+      metadata: {
+        workspaceId: "ws-123",
+        workspaceName: "Design Team",
+        inviterId: "user-456",
+        inviterName: "Sarah Johnson",
+      },
+    },
+    {
+      id: "2",
+      type: "invite_accepted",
+      title: "Invitation Accepted",
+      message: "Alex Chen has accepted your invitation to Marketing workspace",
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      read: true,
+      metadata: {
+        workspaceId: "ws-789",
+        workspaceName: "Marketing",
+        userId: "user-101",
+        userName: "Alex Chen",
+      },
+    },
+    {
+      id: "3",
+      type: "system_message",
+      title: "Workspace Upgrade Available",
+      message:
+        "New features are available for your workspace. Click to learn more.",
+      createdAt: new Date(Date.now() - 172800000).toISOString(),
+      read: false,
+    },
+  ];
+}

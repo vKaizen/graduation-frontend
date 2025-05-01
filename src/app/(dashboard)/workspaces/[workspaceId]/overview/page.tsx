@@ -9,6 +9,7 @@ import { ChevronDown, Plus, List } from "lucide-react";
 import Link from "next/link";
 import { fetchWorkspaceMembers, fetchProjectsByWorkspace } from "@/api-service";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { MemberInviteModal } from "@/components/workspace/MemberInviteModal";
 
 // Simple loading component
 function WorkspaceLoading() {
@@ -140,7 +141,7 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
   }, [workspace._id]);
 
   return (
-    <div className="px-6 py-8 bg-[#1a1a1a] min-h-full flex flex-col">
+    <div className="px-6 py-8 bg-[#111111] min-h-full flex flex-col">
       <div className="grid grid-cols-3 gap-8 flex-1">
         {/* Main Content - Curated Work */}
         <div className="col-span-2">
@@ -183,7 +184,7 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
                   <Link
                     key={project._id}
                     href={`/projects/${project._id}/board`}
-                    className="block p-4 rounded-lg bg-[#252525] hover:bg-[#353535] transition-colors border border-[#353535]"
+                    className="block p-4 rounded-lg bg-[#1a1a1a] hover:bg-[#353535] transition-colors border border-[#353535]"
                   >
                     <div className="flex items-center">
                       <div
@@ -211,8 +212,8 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
         {/* Sidebar */}
         <div className="col-span-1 space-y-8">
           {/* Members Section */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-[#1a1a1a] rounded-lg p-4 border border-[#353535]">
+            <div className="flex items-center  justify-between mb-4">
               <h2 className="text-xl font-medium text-white">Members</h2>
               <Button
                 variant="ghost"
@@ -244,15 +245,30 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
                     </AvatarFallback>
                   </Avatar>
                 ))}
-                <Button className="h-10 w-10 rounded-full bg-[#252525] hover:bg-[#353535] p-0 border border-[#353535]">
-                  <Plus className="h-4 w-4 text-white" />
-                </Button>
+                <MemberInviteModal
+                  workspaceId={workspace._id}
+                  projects={projects.map((p) => ({ id: p._id, name: p.name }))}
+                  onInviteSent={() => {
+                    // Reload members data after invitation is sent
+                    const loadMembers = async () => {
+                      try {
+                        const membersData = await fetchWorkspaceMembers(
+                          workspace._id
+                        );
+                        setMembers(membersData);
+                      } catch (error) {
+                        console.error("Failed to reload members data:", error);
+                      }
+                    };
+                    loadMembers();
+                  }}
+                />
               </div>
             )}
           </div>
 
           {/* Goals Section */}
-          <div>
+          <div className="bg-[#1a1a1a] rounded-lg p-4 border border-[#353535]">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-medium text-white">Goals</h2>
               <Button

@@ -50,6 +50,9 @@ export function NewProjectForm() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [selectedColor, setSelectedColor] = useState(PROJECT_COLORS[0].value);
+  const [projectVisibility, setProjectVisibility] = useState<
+    "public" | "invite-only"
+  >("public");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const { currentWorkspace } = useWorkspace();
@@ -119,6 +122,7 @@ export function NewProjectForm() {
         color: colorHex,
         status: "on-track",
         workspaceId: selectedWorkspace,
+        visibility: projectVisibility,
       });
 
       if (newProject && newProject._id) {
@@ -273,6 +277,44 @@ export function NewProjectForm() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Project Visibility */}
+          <div className="space-y-1.5">
+            <label className="text-sm text-[#A1A1A1]">Project visibility</label>
+            <Select
+              value={projectVisibility}
+              onValueChange={(value) =>
+                setProjectVisibility(value as "public" | "invite-only")
+              }
+            >
+              <SelectTrigger className="w-full bg-[#121212] border-0 text-white h-11">
+                <SelectValue placeholder="Select visibility">
+                  {projectVisibility === "public"
+                    ? "Public (All workspace members)"
+                    : "Invite-only"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="bg-[#121212] border-[#353535] text-white">
+                <SelectItem value="public">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Public (All workspace members)
+                  </div>
+                </SelectItem>
+                <SelectItem value="invite-only">
+                  <div className="flex items-center gap-2">
+                    <User2 className="h-4 w-4" />
+                    Invite-only
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-[#666666] mt-1">
+              {projectVisibility === "public"
+                ? "All workspace members can access this project"
+                : "Only invited members can access this project"}
+            </p>
           </div>
 
           {/* AI Setup Button */}

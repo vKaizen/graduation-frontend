@@ -11,6 +11,9 @@ export interface Task {
   order: number;
   section: string;
   project: string;
+  createdBy?: string;
+  updatedBy?: string;
+  updatedByName?: string;
 }
 
 export interface Section {
@@ -84,10 +87,11 @@ export interface TaskDetails extends Omit<Task, "project"> {
 export interface CreateProjectDto {
   name: string;
   description?: string;
-  ownerId?: string;
-  color: string;
-  status: string;
+  ownerId: string;
+  color?: string;
+  status?: string;
   workspaceId: string;
+  selectedMembers?: string[];
 }
 
 export interface AddMemberDto {

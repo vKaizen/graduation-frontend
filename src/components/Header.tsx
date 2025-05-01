@@ -23,6 +23,7 @@ import {
 } from "./ui/dropdown-menu";
 import { Input } from "./ui/input";
 import Link from "next/link";
+import { NotificationsContainer } from "./notifications/NotificationsContainer";
 
 export function Header() {
   return (
@@ -94,6 +95,9 @@ export function Header() {
           </kbd>
         </div>
       </div>
+
+      {/* Notifications Container */}
+      <NotificationsContainer />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

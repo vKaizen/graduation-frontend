@@ -205,21 +205,49 @@ export function ListView({
     }
   };
 
-  const handleUpdateTask = (sectionId: string, taskId: string) => {
-    const taskData = newTaskData[sectionId];
-    if (taskData) {
-      updateTask(sectionId, taskId, {
-        title: taskData.title,
-        assignee: taskData.assignee === "unassigned" ? null : taskData.assignee,
-        dueDate: taskData.dueDate,
-        priority: taskData.priority,
-        description: taskData.description,
-        subtasks: taskData.subtasks,
-        status: taskData.status,
-      });
-      setEditingTask(null);
-      handleCancelCreate(sectionId);
+  const handleUpdateTask = (
+    taskId: string,
+    updates: Partial<TaskDetailsType>
+  ) => {
+    // Find which section contains this task
+    let taskSectionId: string | null = null;
+    let foundTask: Task | null = null;
+
+    for (const section of project.sections) {
+      const task = section.tasks.find((t) => t._id === taskId);
+      if (task) {
+        taskSectionId = section._id;
+        foundTask = task;
+        break;
+      }
     }
+
+    if (taskSectionId && foundTask) {
+      // Get current user information from localStorage
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+      // Extract only the properties that exist in the Task type
+      const taskUpdates: Partial<Task> = {
+        title: updates.title,
+        assignee: updates.assignee,
+        dueDate: updates.dueDate,
+        priority: updates.priority,
+        description: updates.description,
+        subtasks: updates.subtasks,
+        status: updates.status,
+        // Add updater information
+        updatedBy: user.userId || user._id,
+        updatedByName: user.fullName || user.email || "Unknown User",
+      };
+
+      console.log("List view updating task with user info:", taskUpdates);
+
+      // Update the task in the project
+      updateTask(taskSectionId, taskId, taskUpdates);
+    }
+
+    // Update the selected task in the UI
+    setSelectedTask((prev) => (prev ? { ...prev, ...updates } : null));
   };
 
   const handleDuplicateTask = (sectionId: string, taskId: string) => {
@@ -315,7 +343,15 @@ export function ListView({
   ) => {
     if (e.key === "Enter") {
       if (taskId) {
-        handleUpdateTask(sectionId, taskId);
+        handleUpdateTask(taskId, {
+          title: newTaskData[sectionId]?.title || "",
+          assignee: newTaskData[sectionId]?.assignee || null,
+          dueDate: newTaskData[sectionId]?.dueDate || "",
+          priority: newTaskData[sectionId]?.priority || undefined,
+          description: newTaskData[sectionId]?.description || "",
+          subtasks: newTaskData[sectionId]?.subtasks || [],
+          status: newTaskData[sectionId]?.status || "not started",
+        });
       } else {
         handleAddTask(sectionId);
       }
@@ -366,37 +402,6 @@ export function ListView({
       },
     };
     setSelectedTask(taskDetails);
-  };
-
-  const handleTaskUpdate = (
-    taskId: string,
-    updates: Partial<TaskDetailsType>
-  ) => {
-    let taskSectionId: string | null = null;
-
-    for (const section of project.sections) {
-      const taskExists = section.tasks.some((t) => t._id === taskId);
-      if (taskExists) {
-        taskSectionId = section._id;
-        break;
-      }
-    }
-
-    if (taskSectionId) {
-      const taskUpdates: Partial<Task> = {
-        title: updates.title,
-        assignee: updates.assignee,
-        dueDate: updates.dueDate,
-        priority: updates.priority,
-        description: updates.description,
-        subtasks: updates.subtasks,
-        status: updates.status,
-      };
-
-      updateTask(taskSectionId, taskId, taskUpdates);
-    }
-
-    setSelectedTask((prev) => (prev ? { ...prev, ...updates } : null));
   };
 
   const handleDeleteTask = async (sectionId: string, taskId: string) => {
@@ -650,7 +655,17 @@ export function ListView({
                 variant="ghost"
                 size="sm"
                 className="h-9 px-2 hover:text-neutral-300"
-                onClick={() => handleUpdateTask(section._id, task._id)}
+                onClick={() =>
+                  handleUpdateTask(task._id, {
+                    title: newTaskData[section._id]?.title || "",
+                    assignee: newTaskData[section._id]?.assignee || null,
+                    dueDate: newTaskData[section._id]?.dueDate || "",
+                    priority: newTaskData[section._id]?.priority || undefined,
+                    description: newTaskData[section._id]?.description || "",
+                    subtasks: newTaskData[section._id]?.subtasks || [],
+                    status: newTaskData[section._id]?.status || "not started",
+                  })
+                }
               >
                 Save
               </Button>

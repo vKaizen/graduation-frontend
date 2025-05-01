@@ -23,6 +23,7 @@ import {
   fetchProjectsByWorkspace,
 } from "@/api-service";
 import { useWorkspace } from "@/contexts/workspace-context";
+import { useAuth } from "@/contexts/AuthContext";
 
 const scrollbarHideClass = `
   scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]
@@ -66,6 +67,7 @@ export function AppSidebar() {
   >([]);
   const [loading, setLoading] = useState(true);
   const { currentWorkspace } = useWorkspace();
+  const { authState } = useAuth();
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -84,27 +86,58 @@ export function AppSidebar() {
         );
 
         // Fetch projects filtered by the current workspace
+        // Note: The backend API returns all accessible projects (including public ones)
         const workspaceProjects = await fetchProjectsByWorkspace(
           currentWorkspace._id
         );
 
-        // Function will now return empty array instead of throwing
         console.log(
           "AppSidebar: Received workspace projects:",
           workspaceProjects
         );
 
-        // Filter out any null items and map to UI format
-        const projectList = (workspaceProjects || [])
-          .filter((project) => project !== null)
+        // Get current user ID from auth context
+        const userId = authState.userId;
+        console.log("Current user ID from auth context:", userId);
+
+        if (!userId) {
+          console.error("No user ID found in auth context");
+          setProjects([]);
+          setLoading(false);
+          return;
+        }
+
+        // Filter to only include projects where the user is explicitly a member
+        const userProjects = (workspaceProjects || [])
+          .filter((project) => {
+            if (!project || !project.roles || !Array.isArray(project.roles)) {
+              return false;
+            }
+
+            // Check if user is a member of this project
+            const isMember = project.roles.some((role) => {
+              const roleUserId =
+                typeof role.userId === "object"
+                  ? role.userId._id || role.userId.toString()
+                  : role.userId;
+              return roleUserId === userId;
+            });
+
+            console.log(
+              `Project ${project.name} (${project._id}) - User is member: ${isMember}`
+            );
+
+            // Only show projects where user is an actual member
+            return isMember;
+          })
           .map((project) => ({
             id: project._id,
             name: project.name || "Untitled Project",
             color: project.color || "#6366f1", // Default to indigo if no color
           }));
 
-        console.log("AppSidebar: Final processed project list:", projectList);
-        setProjects(projectList);
+        console.log("AppSidebar: User's projects:", userProjects);
+        setProjects(userProjects);
       } catch (error) {
         console.error("Unexpected error in loadProjects:", error);
         setProjects([]);
@@ -114,7 +147,7 @@ export function AppSidebar() {
     };
 
     loadProjects();
-  }, [currentWorkspace]);
+  }, [currentWorkspace, authState.userId]);
 
   return (
     <aside
