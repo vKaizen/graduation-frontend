@@ -671,17 +671,34 @@ export const updateTask = async (
   taskId: string,
   updates: Partial<Task>
 ): Promise<Task> => {
-  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-    method: "PATCH",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(updates),
-  });
+  console.log("📤 [API] Updating task:", taskId);
+  console.log("📤 [API] Update payload:", JSON.stringify(updates, null, 2));
 
-  if (!response.ok) {
-    throw new Error("Failed to update task");
+  try {
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      console.error(
+        "🚫 [API] Error updating task:",
+        response.status,
+        response.statusText
+      );
+      const errorText = await response.text();
+      console.error("🚫 [API] Error response:", errorText);
+      throw new Error("Failed to update task");
+    }
+
+    const updatedTask = await response.json();
+    console.log("✅ [API] Task updated successfully:", updatedTask);
+    return updatedTask;
+  } catch (error) {
+    console.error("🚫 [API] Exception in updateTask:", error);
+    throw error;
   }
-
-  return response.json();
 };
 
 export const deleteTask = async (taskId: string): Promise<void> => {

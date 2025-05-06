@@ -66,8 +66,25 @@ export function AppSidebar() {
     { id: string; name: string; color: string }[]
   >([]);
   const [loading, setLoading] = useState(true);
-  const { currentWorkspace } = useWorkspace();
+  const { currentWorkspace, setCurrentWorkspace, workspaces } = useWorkspace();
   const { authState } = useAuth();
+
+  // Add new useEffect to detect workspace change from URL
+  useEffect(() => {
+    if (pathname && pathname.includes('/workspaces/')) {
+      // Extract workspace ID from pathname
+      const match = pathname.match(/\/workspaces\/([^\/]+)/);
+      if (match && match[1] && currentWorkspace && match[1] !== currentWorkspace._id) {
+        console.log(`URL workspace (${match[1]}) doesn't match current workspace (${currentWorkspace._id})`);
+        // Find the workspace in the list
+        const workspaceFromUrl = workspaces.find(w => w._id === match[1]);
+        if (workspaceFromUrl) {
+          console.log(`Switching to workspace from URL: ${workspaceFromUrl.name}`);
+          setCurrentWorkspace(workspaceFromUrl);
+        }
+      }
+    }
+  }, [pathname, workspaces, currentWorkspace, setCurrentWorkspace]);
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -147,7 +164,7 @@ export function AppSidebar() {
     };
 
     loadProjects();
-  }, [currentWorkspace, authState.userId]);
+  }, [currentWorkspace, authState.userId, pathname]);
 
   return (
     <aside

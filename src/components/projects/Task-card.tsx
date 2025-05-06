@@ -30,6 +30,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
+import { getAuthCookie } from "@/lib/cookies";
+import { jwtDecode } from "jwt-decode";
 
 interface Task {
   _id: string;
@@ -39,7 +41,16 @@ interface Task {
   priority: string;
   status: string;
   tags: string;
-  subtasks: any[];
+  subtasks: Subtask[];
+  updatedBy?: string;
+  updatedByName?: string;
+}
+
+interface Subtask {
+  id: string;
+  title: string;
+  completed: boolean;
+  taskId: string;
 }
 
 interface TaskCardProps {
@@ -53,16 +64,16 @@ interface TaskCardProps {
   ) => void;
   onCancel: () => void;
   isEditing: boolean;
-  taskData: any;
-  setTaskData: (data: any) => void;
+  taskData: Partial<Task>;
+  setTaskData: (data: Partial<Task>) => void;
   getAssigneeName: (assigneeId: string | null) => string;
-  projectMembers: any[];
+  projectMembers: { _id: string; fullName?: string; email: string }[];
   handleKeyDown: (
     e: React.KeyboardEvent<HTMLInputElement>,
     sectionId: string,
     taskId?: string
   ) => void;
-  dragHandleProps: any;
+  dragHandleProps: Record<string, unknown>;
   onDuplicate: (sectionId: string, taskId: string) => void;
   onDelete: (sectionId: string, taskId: string) => void;
   onMoveTask: (
@@ -70,7 +81,7 @@ interface TaskCardProps {
     taskId: string,
     targetSectionId: string
   ) => void;
-  projectSections: any[];
+  projectSections: { _id: string; title: string }[];
   onTaskClick?: (task: Task, sectionId: string) => void;
 }
 
@@ -137,15 +148,62 @@ export function TaskCard({
   };
 
   const handleSave = () => {
-    onUpdate(sectionId, task._id, {
-      title: taskData.title,
-      assignee: taskData.assignee,
-      dueDate: taskData.dueDate,
-      priority: taskData.priority,
+    // Get current user information from JWT token instead of localStorage
+    let updatedBy = "";
+    let updatedByName = "Unknown User";
+
+    try {
+      const token = getAuthCookie();
+      if (token) {
+        const decoded: {
+          sub?: string;
+          id?: string;
+          userId?: string;
+          username?: string;
+          name?: string;
+          fullName?: string;
+          email?: string;
+        } = jwtDecode(token);
+
+        // Extract current user ID from token
+        updatedBy = decoded.sub || decoded.id || decoded.userId || "";
+        // Extract name from token
+        updatedByName =
+          decoded.fullName ||
+          decoded.name ||
+          decoded.email ||
+          decoded.username ||
+          "Unknown User";
+      }
+    } catch (error) {
+      console.error("Error extracting user info from token:", error);
+    }
+
+    // Create the update payload
+    const updatedTask = {
+      title: taskData.title || task.title,
+      assignee: taskData.assignee || task.assignee,
+      dueDate: taskData.dueDate || task.dueDate,
+      priority: taskData.priority || task.priority,
       status: taskData.status || task.status,
       tags: taskData.tags || task.tags,
+      // Add updater information using JWT data
+      updatedBy,
+      updatedByName,
+    };
+
+    console.log("🔍 [TaskCard] Save button clicked. Sending update:", {
+      sectionId,
+      taskId: task._id,
+      updatedTask,
     });
+
+    // Call the update function
+    onUpdate(sectionId, task._id, updatedTask);
+
+    // Close the expanded view
     setIsExpanded(false);
+    onCancel();
   };
 
   const handleCancel = (e?: React.MouseEvent) => {
@@ -476,7 +534,6 @@ export function TaskCard({
                       <DropdownMenuSubContent
                         className="bg-[#1a1a1a] border-[#262626]"
                         alignOffset={-5}
-                        side="right"
                       >
                         {projectSections
                           .filter((s) => s._id !== sectionId)

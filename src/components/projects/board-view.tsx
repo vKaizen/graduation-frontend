@@ -33,6 +33,8 @@ import { fetchProjectMembers } from "@/api-service";
 import type { SortConfig } from "./sort-menu";
 import { TaskCard } from "./Task-card";
 import { TaskDetails } from "./task-details";
+import { getAuthCookie } from "@/lib/cookies";
+import { jwtDecode } from "jwt-decode";
 
 interface BoardViewProps {
   project: Project;
@@ -186,48 +188,89 @@ export function BoardView({
   };
 
   const handleUpdateTask = (
+    sectionId: string,
     taskId: string,
-    updates: Partial<TaskDetailsType>
+    updates: Partial<Task>
   ) => {
-    // Find which section contains this task
-    let taskSectionId: string | null = null;
+    console.log("🔍 [BoardView] handleUpdateTask called with:", {
+      sectionId,
+      taskId,
+      updates,
+    });
 
-    for (const section of project.sections) {
-      const taskExists = section.tasks.some((t) => t.id === taskId);
-      if (taskExists) {
-        taskSectionId = section.id;
-        break;
+    // Check if sectionId exists before proceeding
+    if (!sectionId) {
+      console.error("Missing sectionId for task update:", taskId);
+      return;
+    }
+
+    // Extract updatedBy and updatedByName from the updates if they exist
+    let { updatedBy, updatedByName } = updates;
+
+    // If updatedBy and updatedByName are not provided, get them from the JWT token
+    if (!updatedBy || !updatedByName) {
+      try {
+        // Get token from cookie
+        const token = getAuthCookie();
+        if (token) {
+          // Decode the token to extract user information
+          const decoded: any = jwtDecode(token);
+          if (decoded && decoded.sub) {
+            updatedBy = decoded.sub;
+
+            // Extract the user's fullName from the token, or try other identifier fields
+            // Format the name nicely if we only have an email
+            if (decoded.email && !decoded.fullName && !decoded.name) {
+              // If we have an email but no name, extract the name part from the email
+              // e.g., "john.doe@example.com" becomes "John Doe"
+              const emailName = decoded.email.split("@")[0];
+              const formattedName = emailName
+                .replace(/[._-]/g, " ") // Replace dots, underscores, and hyphens with spaces
+                .split(" ")
+                .map(
+                  (word: string) =>
+                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                )
+                .join(" ");
+              updatedByName = formattedName;
+            } else {
+              // Use available name fields with fallbacks
+              updatedByName =
+                decoded.fullName ||
+                decoded.name ||
+                decoded.username ||
+                "Unknown User";
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error extracting user info from token:", error);
       }
     }
 
-    if (taskSectionId) {
-      // Get current user information from localStorage
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
+    // Extract only the properties that exist in the Task type
+    const taskUpdates: Partial<Task> = {
+      ...updates,
+      // Add updater information if not already present
+      updatedBy,
+      updatedByName,
+    };
 
-      // Extract only the properties that exist in the Task type
-      const taskUpdates: Partial<Task> = {
-        title: updates.title,
-        assignee: updates.assignee,
-        dueDate: updates.dueDate,
-        priority: updates.priority,
-        description: updates.description,
-        subtasks: updates.subtasks,
-        status: updates.status,
-        budget: updates.budget,
-        tags: updates.tags,
-        // Add updater information
-        updatedBy: user.userId || user._id,
-        updatedByName: user.fullName || user.email || "Unknown User",
-      };
+    console.log(
+      "🔍 [BoardView] Updating task with complete info:",
+      taskUpdates
+    );
 
-      console.log("Updating task with user info:", taskUpdates);
+    // Update the task in the project
+    updateTask(sectionId, taskId, taskUpdates);
 
-      // Update the task in the project
-      updateTask(taskSectionId, taskId, taskUpdates);
+    // Clear editing state
+    setEditingTask(null);
+
+    // Update the selected task if it's open
+    if (selectedTask && selectedTask._id === taskId) {
+      setSelectedTask((prev) => (prev ? { ...prev, ...updates } : null));
     }
-
-    // Update the selected task
-    setSelectedTask((prev) => (prev ? { ...prev, ...updates } : null));
   };
 
   const handleKeyDown = (
@@ -237,7 +280,7 @@ export function BoardView({
   ) => {
     if (e.key === "Enter") {
       if (taskId) {
-        handleUpdateTask(taskId, {
+        handleUpdateTask(sectionId, taskId, {
           title: selectedTask?.title || "",
           assignee: selectedTask?.assignee || null,
           dueDate: selectedTask?.dueDate || "",

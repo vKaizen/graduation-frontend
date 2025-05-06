@@ -329,8 +329,19 @@ export function ProjectView({
     if (!project || !originalProject) return;
 
     try {
-      // Call the API to update the task
+      console.log("🔍 [ProjectView] handleUpdateTask called with:", {
+        sectionId,
+        taskId,
+        updatedTask,
+      });
+
+      // Call the API to update the task - passing only taskId and updatedTask to the API
       const updatedTaskData = await updateTask(taskId, updatedTask);
+
+      console.log(
+        "🔍 [ProjectView] Task successfully updated, received:",
+        updatedTaskData
+      );
 
       // Update both project and originalProject with the response from the API
       const updatedSections = project.sections.map((section) => {
