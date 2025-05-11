@@ -16,6 +16,9 @@ import {
   Rocket,
   Star,
   UserCircle,
+  BarChart3,
+  Target,
+  FolderKanban,
 } from "lucide-react";
 import {
   getProjectIds,
@@ -71,15 +74,24 @@ export function AppSidebar() {
 
   // Add new useEffect to detect workspace change from URL
   useEffect(() => {
-    if (pathname && pathname.includes('/workspaces/')) {
+    if (pathname && pathname.includes("/workspaces/")) {
       // Extract workspace ID from pathname
       const match = pathname.match(/\/workspaces\/([^\/]+)/);
-      if (match && match[1] && currentWorkspace && match[1] !== currentWorkspace._id) {
-        console.log(`URL workspace (${match[1]}) doesn't match current workspace (${currentWorkspace._id})`);
+      if (
+        match &&
+        match[1] &&
+        currentWorkspace &&
+        match[1] !== currentWorkspace._id
+      ) {
+        console.log(
+          `URL workspace (${match[1]}) doesn't match current workspace (${currentWorkspace._id})`
+        );
         // Find the workspace in the list
-        const workspaceFromUrl = workspaces.find(w => w._id === match[1]);
+        const workspaceFromUrl = workspaces.find((w) => w._id === match[1]);
         if (workspaceFromUrl) {
-          console.log(`Switching to workspace from URL: ${workspaceFromUrl.name}`);
+          console.log(
+            `Switching to workspace from URL: ${workspaceFromUrl.name}`
+          );
           setCurrentWorkspace(workspaceFromUrl);
         }
       }
@@ -192,6 +204,23 @@ export function AppSidebar() {
             >
               <Plus className="h-3 w-3" />
             </Button>
+          </div>
+          <div className="space-y-1 mt-1">
+            <SidebarNavItem
+              href="/insights/reporting"
+              label="Reporting"
+              icon={BarChart3}
+            />
+            <SidebarNavItem
+              href="/insights/goals"
+              label="Goals"
+              icon={Target}
+            />
+            <SidebarNavItem
+              href="/insights/portfolios"
+              label="Portfolios"
+              icon={FolderKanban}
+            />
           </div>
         </div>
 

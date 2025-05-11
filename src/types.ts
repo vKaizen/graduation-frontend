@@ -6,6 +6,7 @@ export interface Task {
   priority?: "High" | "Medium" | "Low";
   description?: string;
   completed?: boolean;
+  completedAt?: string | Date;
   subtasks?: Subtask[];
   status: "not started" | "in progress" | "completed";
   order: number;
@@ -133,4 +134,77 @@ export interface User {
   isAdmin?: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type GoalStatus =
+  | "on-track"
+  | "at-risk"
+  | "off-track"
+  | "achieved"
+  | "no-status";
+export type GoalTimeframe =
+  | "Q1"
+  | "Q2"
+  | "Q3"
+  | "Q4"
+  | "H1"
+  | "H2"
+  | "FY"
+  | "custom";
+
+export interface Goal {
+  _id: string;
+  title: string;
+  description?: string;
+  progress: number;
+  parentGoalId?: string;
+  ownerId: string;
+  linkedTasks?: string[];
+  status: GoalStatus;
+  isPrivate: boolean;
+  timeframe: GoalTimeframe;
+  timeframeYear?: number;
+  startDate?: string;
+  dueDate?: string;
+  projects?: string[];
+  workspaceId?: string;
+  children?: Goal[];
+  owner?: User;
+  workspace?: Workspace;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateGoalDto {
+  title: string;
+  description?: string;
+  progress?: number;
+  parentGoalId?: string;
+  ownerId: string;
+  linkedTasks?: string[];
+  status?: GoalStatus;
+  isPrivate?: boolean;
+  timeframe?: GoalTimeframe;
+  timeframeYear?: number;
+  startDate?: string;
+  dueDate?: string;
+  projects?: string[];
+  workspaceId?: string;
+}
+
+export interface UpdateGoalDto {
+  title?: string;
+  description?: string;
+  progress?: number;
+  parentGoalId?: string;
+  ownerId?: string;
+  linkedTasks?: string[];
+  status?: GoalStatus;
+  isPrivate?: boolean;
+  timeframe?: GoalTimeframe;
+  timeframeYear?: number;
+  startDate?: string;
+  dueDate?: string;
+  projects?: string[];
+  workspaceId?: string;
 }

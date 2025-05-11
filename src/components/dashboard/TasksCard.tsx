@@ -10,6 +10,7 @@ import { useWorkspace } from "@/contexts/workspace-context";
 import { fetchTasksByWorkspace, updateTask } from "@/api-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { Task } from "@/types";
 
 interface TasksCardProps {
   onRemove?: () => void;
@@ -24,7 +25,7 @@ export function TasksCard({
   isFullWidth = false,
   onSizeChange,
 }: TasksCardProps) {
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [activeTab, setActiveTab] = useState("upcoming");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,15 +93,29 @@ export function TasksCard({
     currentStatus: boolean
   ) => {
     try {
+      // Get current timestamp for completedAt
+      const now = new Date();
+
       // Optimistically update the UI
       setTasks(
         tasks.map((task) =>
-          task._id === taskId ? { ...task, completed: !currentStatus } : task
+          task._id === taskId
+            ? {
+                ...task,
+                completed: !currentStatus,
+                status: !currentStatus ? "completed" : "not started",
+                completedAt: !currentStatus ? now : undefined,
+              }
+            : task
         )
       );
 
       // Update in the backend
-      await updateTask(taskId, { completed: !currentStatus });
+      await updateTask(taskId, {
+        completed: !currentStatus,
+        status: !currentStatus ? "completed" : "not started",
+        completedAt: !currentStatus ? now.toISOString() : null,
+      });
     } catch (error) {
       console.error("Error updating task:", error);
 

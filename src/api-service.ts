@@ -11,14 +11,16 @@ import type {
   AddWorkspaceMemberDto,
   UpdateWorkspaceMemberRoleDto,
   User,
+  CreateGoalDto,
+  UpdateGoalDto,
+  Goal,
 } from "./types";
 import { type DashboardCard } from "./contexts/DashboardContext";
 import { getAuthCookie } from "./lib/cookies";
 import { jwtDecode } from "jwt-decode";
 
 // Make sure the API base URL is correct
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 console.log("API base URL:", API_BASE_URL);
 
 // Helper function to get auth headers
@@ -73,7 +75,7 @@ export const fetchUsers = async (): Promise<any[]> => {
   try {
     console.log("Fetching users with auth headers");
 
-    const headers = getAuthHeaders();
+    const headers = getAuthHeaders() as Record<string, string>;
     const response = await fetch(`${API_BASE_URL}/users`, {
       headers,
       // Add a timeout to prevent hanging requests
@@ -145,7 +147,7 @@ export const fetchUserById = async (userId: string): Promise<any> => {
     );
 
     // Debug headers
-    const headers = getAuthHeaders();
+    const headers = getAuthHeaders() as Record<string, string>;
     console.log("🔍 API: Request headers:", JSON.stringify(headers));
 
     const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
@@ -674,6 +676,15 @@ export const updateTask = async (
   console.log("📤 [API] Updating task:", taskId);
   console.log("📤 [API] Update payload:", JSON.stringify(updates, null, 2));
 
+  // Add specific debug for task completion
+  if (updates.status === "completed") {
+    console.log("📤 [TASK COMPLETION] Marking task as completed:", taskId);
+    console.log(
+      "📤 [TASK COMPLETION] Current timestamp:",
+      new Date().toISOString()
+    );
+  }
+
   try {
     const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
       method: "PATCH",
@@ -694,6 +705,19 @@ export const updateTask = async (
 
     const updatedTask = await response.json();
     console.log("✅ [API] Task updated successfully:", updatedTask);
+
+    // Add specific debug log for task completion response
+    if (updates.status === "completed") {
+      console.log(
+        "✅ [TASK COMPLETION] Server response for completed task:",
+        updatedTask
+      );
+      console.log(
+        "✅ [TASK COMPLETION] CompletedAt timestamp:",
+        updatedTask.completedAt
+      );
+    }
+
     return updatedTask;
   } catch (error) {
     console.error("🚫 [API] Exception in updateTask:", error);
@@ -715,6 +739,56 @@ export const deleteTask = async (taskId: string): Promise<void> => {
   } catch (error) {
     console.error("Error deleting task:", error);
     throw error;
+  }
+};
+
+// Add a function to fetch tasks by project for debugging
+export const fetchTasksByProject = async (
+  projectId: string
+): Promise<Task[]> => {
+  try {
+    console.log(`DEBUG API - Fetching tasks for project: ${projectId}`);
+
+    // Use the correct backend route
+    const response = await fetch(`${API_BASE_URL}/tasks/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+
+    console.log(
+      `DEBUG API - Task fetch response status:`,
+      response.status,
+      response.statusText
+    );
+
+    if (!response.ok) {
+      console.error(
+        `DEBUG API - Error fetching tasks: ${response.status} ${response.statusText}`
+      );
+      return [];
+    }
+
+    const tasks = await response.json();
+    console.log(
+      `DEBUG API - Found ${tasks?.length || 0} tasks for project ${projectId}`
+    );
+
+    // Check for completed tasks
+    const completedTasks = tasks.filter(
+      (task: Task) => task.status === "completed" || task.completed
+    );
+    console.log(
+      `DEBUG API - Found ${
+        completedTasks?.length || 0
+      } completed tasks for project ${projectId}`
+    );
+
+    return tasks;
+  } catch (error) {
+    console.error(
+      `DEBUG API - Error fetching tasks for project ${projectId}:`,
+      error
+    );
+    return [];
   }
 };
 
@@ -829,7 +903,7 @@ export const fetchWorkspaceById = async (
 ): Promise<Workspace> => {
   try {
     console.log(`Fetching workspace with ID: ${workspaceId}`);
-    const headers = getAuthHeaders();
+    const headers = getAuthHeaders() as Record<string, string>;
 
     // Debug log the authorization header
     console.log("Authorization header present:", !!headers.Authorization);
@@ -1999,3 +2073,563 @@ function getMockNotifications(): Notification[] {
     },
   ];
 }
+
+// Goals API functions
+export const fetchGoals = async (filters?: {
+  ownerId?: string;
+  teamId?: string;
+  workspaceId?: string;
+  status?: string[];
+  timeframe?: string;
+  timeframeYear?: number;
+}): Promise<Goal[]> => {
+  try {
+    // Build query string from filters
+    let queryParams = new URLSearchParams();
+
+    if (filters) {
+      if (filters.ownerId) queryParams.append("ownerId", filters.ownerId);
+      if (filters.teamId) queryParams.append("teamId", filters.teamId);
+      if (filters.workspaceId)
+        queryParams.append("workspaceId", filters.workspaceId);
+      if (filters.status && filters.status.length > 0)
+        queryParams.append("status", filters.status.join(","));
+      if (filters.timeframe) queryParams.append("timeframe", filters.timeframe);
+      if (filters.timeframeYear)
+        queryParams.append("timeframeYear", filters.timeframeYear.toString());
+    }
+
+    const queryString = queryParams.toString();
+    const url = `${API_BASE_URL}/goals${queryString ? `?${queryString}` : ""}`;
+
+    const response = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch goals: ${response.statusText}`);
+    }
+
+    const goals = await response.json();
+    return goals;
+  } catch (error) {
+    console.error("Error fetching goals:", error);
+    throw error;
+  }
+};
+
+export const createGoal = async (goalData: CreateGoalDto): Promise<Goal> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/goals`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(goalData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to create goal");
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error creating goal:", error);
+    throw error;
+  }
+};
+
+export const updateGoal = async (
+  goalId: string,
+  updates: UpdateGoalDto
+): Promise<Goal> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/goals/${goalId}`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to update goal");
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error updating goal:", error);
+    throw error;
+  }
+};
+
+export const deleteGoal = async (goalId: string): Promise<void> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/goals/${goalId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to delete goal");
+    }
+  } catch (error) {
+    console.error("Error deleting goal:", error);
+    throw error;
+  }
+};
+
+export const fetchGoalHierarchy = async (options?: {
+  workspaceId?: string;
+}): Promise<Goal[]> => {
+  try {
+    console.log("API SERVICE: Fetching goal hierarchy...");
+    let queryParams = new URLSearchParams();
+
+    if (options) {
+      if (options.workspaceId)
+        queryParams.append("workspaceId", options.workspaceId);
+    }
+
+    const queryString = queryParams.toString();
+    const url = `${API_BASE_URL}/goals/hierarchy${
+      queryString ? `?${queryString}` : ""
+    }`;
+
+    console.log(`API SERVICE: Making request to: ${url}`);
+
+    // Log auth headers (without sensitive info)
+    const headers = getAuthHeaders();
+    console.log(
+      "API SERVICE: Using auth headers:",
+      Object.keys(headers).includes("Authorization")
+        ? "Authorization header present"
+        : "No Authorization header"
+    );
+
+    const response = await fetch(url, {
+      headers: headers,
+    });
+
+    console.log(
+      `API SERVICE: Response status: ${response.status} ${response.statusText}`
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`API SERVICE: Error fetching goal hierarchy: ${errorText}`);
+      throw new Error(`Failed to fetch goal hierarchy: ${response.statusText}`);
+    }
+
+    const goalHierarchy = await response.json();
+    console.log(`API SERVICE: Received ${goalHierarchy?.length || 0} goal(s)`);
+    console.log(
+      "API SERVICE: First goal:",
+      goalHierarchy && goalHierarchy.length > 0 ? goalHierarchy[0]._id : "none"
+    );
+
+    // Return empty array if we got null or undefined
+    return Array.isArray(goalHierarchy) ? goalHierarchy : [];
+  } catch (error) {
+    console.error("Error fetching goal hierarchy:", error);
+    // Return empty array instead of throwing to prevent UI crashes
+    return [];
+  }
+};
+
+export const linkTaskToGoal = async (
+  goalId: string,
+  taskId: string
+): Promise<Goal> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/goals/${goalId}/link-task/${taskId}`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to link task to goal");
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error linking task to goal:", error);
+    throw error;
+  }
+};
+
+export const unlinkTaskFromGoal = async (
+  goalId: string,
+  taskId: string
+): Promise<Goal> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/goals/${goalId}/unlink-task/${taskId}`,
+      {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to unlink task from goal");
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error unlinking task from goal:", error);
+    throw error;
+  }
+};
+
+export const calculateGoalProgress = async (
+  goalId: string
+): Promise<number> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/goals/${goalId}/calculate-progress`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to calculate goal progress");
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error calculating goal progress:", error);
+    throw error;
+  }
+};
+
+// Analytics-related types
+interface TimelineData {
+  dates: string[];
+  counts: number[];
+}
+
+interface ProjectStatistics {
+  totalTasks: number;
+  completedTasks: number;
+  completionRate: number;
+  tasksByProject: Record<
+    string,
+    {
+      totalTasks: number;
+      completedTasks: number;
+    }
+  >;
+}
+
+// Analytics-related API calls
+export const fetchTaskCompletionTimeline = async (
+  startDate: Date,
+  endDate: Date,
+  projectIds?: string[]
+): Promise<TimelineData> => {
+  try {
+    // Debug the input dates
+    console.log(`API Call - startDate:`, startDate);
+    console.log(`API Call - endDate:`, endDate);
+    console.log(`API Call - startDate year:`, startDate.getFullYear());
+    console.log(`API Call - endDate year:`, endDate.getFullYear());
+
+    // Create adjusted dates to handle timezone issues
+    // Clone the dates to avoid modifying the originals
+    const adjustedStartDate = new Date(startDate);
+    // Set start date to beginning of day (00:00:00) in UTC
+    adjustedStartDate.setUTCHours(0, 0, 0, 0);
+
+    const adjustedEndDate = new Date(endDate);
+    // Add one day to end date to make it inclusive and set to end of day (23:59:59) in UTC
+    adjustedEndDate.setUTCDate(adjustedEndDate.getUTCDate() + 1);
+    adjustedEndDate.setUTCHours(23, 59, 59, 999);
+
+    console.log(`API Call - adjustedStartDate:`, adjustedStartDate);
+    console.log(`API Call - adjustedEndDate:`, adjustedEndDate);
+
+    // Build query parameters with adjusted dates
+    const params = new URLSearchParams();
+    params.append("startDate", adjustedStartDate.toISOString());
+    params.append("endDate", adjustedEndDate.toISOString());
+
+    if (projectIds && projectIds.length > 0) {
+      params.append("projectIds", projectIds.join(","));
+    }
+
+    // Debug the params
+    console.log(`API Call - Request params:`, params.toString());
+
+    // Build URL for debugging
+    const url = `${API_BASE_URL}/analytics/task-completion-timeline?${params.toString()}`;
+    console.log(`API Call - Making request to URL:`, url);
+
+    // Collect all tasks from the projects to generate our own timeline if needed
+    let allTasks: Task[] = [];
+
+    // Directly check for completed tasks for these projects before fetching timeline
+    if (projectIds && projectIds.length > 0) {
+      try {
+        // Check each project for completed tasks
+        for (const projectId of projectIds) {
+          const tasks = await fetchTasksByProject(projectId);
+          allTasks = [...allTasks, ...tasks];
+
+          // Check for completed tasks with completedAt set
+          const completedTasks = tasks.filter(
+            (task) => task.status === "completed"
+          );
+
+          console.log(
+            `API Call - Project ${projectId} has ${completedTasks.length} completed tasks`
+          );
+
+          // Log first few completed tasks for debugging
+          if (completedTasks.length > 0) {
+            console.log(
+              `API Call - Sample completed tasks for project ${projectId}:`
+            );
+            completedTasks.slice(0, 3).forEach((task, i) => {
+              console.log(
+                `  Task ${i + 1}: ${task.title} - status: ${
+                  task.status
+                } - completedAt: ${task.completedAt || "not set"}`
+              );
+            });
+          }
+        }
+      } catch (err) {
+        console.error(`API Call - Error checking project tasks:`, err);
+      }
+    }
+
+    // Make the request and capture raw response for debugging
+    const response = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
+
+    console.log(
+      `API Call - Response status:`,
+      response.status,
+      response.statusText
+    );
+
+    // Clone the response for debugging (we can only read it once)
+    const responseClone = response.clone();
+
+    // Save raw response text for debugging
+    const rawResponseText = await responseClone.text();
+    console.log(`API Call - Raw response text:`, rawResponseText);
+
+    // Parse the text manually to avoid issues
+    let data: TimelineData;
+    try {
+      data = rawResponseText
+        ? JSON.parse(rawResponseText)
+        : { dates: [], counts: [] };
+      console.log(`API Call - Parsed response:`, data);
+    } catch (parseError) {
+      console.error(`API Call - Error parsing response:`, parseError);
+      data = { dates: [], counts: [] };
+    }
+
+    // Check if we got valid data from the API
+    const hasApiData =
+      data.dates &&
+      data.dates.length > 0 &&
+      data.counts &&
+      data.counts.some((count) => count > 0);
+
+    // If we didn't get valid data from the API, generate our own timeline
+    if (!hasApiData && allTasks.length > 0) {
+      console.log(
+        `API Call - Generating local timeline data from ${allTasks.length} tasks`
+      );
+
+      // Filter completed tasks
+      const completedTasks = allTasks.filter(
+        (task) => task.status === "completed"
+      );
+      console.log(
+        `API Call - Found ${completedTasks.length} completed tasks for local timeline`
+      );
+
+      if (completedTasks.length > 0) {
+        // Create a map of dates to counts
+        const dateCountMap = new Map<string, number>();
+
+        // Initialize all dates in the range
+        const currentDate = new Date(adjustedStartDate);
+        while (currentDate <= adjustedEndDate) {
+          const dateString = currentDate.toISOString().split("T")[0]; // YYYY-MM-DD
+          dateCountMap.set(dateString, 0);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        // Count tasks by completion date
+        completedTasks.forEach((task) => {
+          // Use completedAt if available, otherwise use current date
+          const completionDate = task.completedAt
+            ? new Date(task.completedAt)
+            : new Date();
+
+          const dateString = completionDate.toISOString().split("T")[0];
+
+          if (dateCountMap.has(dateString)) {
+            dateCountMap.set(
+              dateString,
+              (dateCountMap.get(dateString) || 0) + 1
+            );
+          }
+        });
+
+        // Convert map to arrays
+        const dates: string[] = [];
+        const counts: number[] = [];
+
+        dateCountMap.forEach((count, date) => {
+          dates.push(date);
+          counts.push(count);
+        });
+
+        // Sort dates chronologically
+        const sortedIndices = dates
+          .map((_, i) => i)
+          .sort((a, b) => dates[a].localeCompare(dates[b]));
+
+        data = {
+          dates: sortedIndices.map((i) => dates[i]),
+          counts: sortedIndices.map((i) => counts[i]),
+        };
+
+        console.log(
+          `API Call - Generated local timeline with ${dates.length} dates`
+        );
+      }
+    }
+
+    if (!response.ok) {
+      console.warn(
+        `API Call - Failed with status ${response.status}, using local data instead`
+      );
+    }
+
+    // Debug the response
+    console.log(`API Call - Final timeline data:`, data);
+
+    // Check if we have data with non-zero counts
+    if (data.dates && data.counts) {
+      const nonZeroCounts = data.counts.filter((count) => count > 0);
+      console.log(
+        `API Call - Found ${nonZeroCounts.length} days with completed tasks`
+      );
+
+      // Log days with non-zero counts
+      if (nonZeroCounts.length > 0) {
+        console.log(`API Call - Days with completed tasks:`);
+        data.dates.forEach((date, i) => {
+          if (data.counts[i] > 0) {
+            console.log(`  ${date}: ${data.counts[i]} tasks`);
+          }
+        });
+      } else {
+        console.log(
+          `API Call - No days with completed tasks found in the response`
+        );
+      }
+    }
+
+    return data;
+  } catch (error: unknown) {
+    console.error("Error fetching task completion timeline:", error);
+    // Return empty data rather than throwing to prevent UI crashes
+    return { dates: [], counts: [] };
+  }
+};
+
+export const fetchProjectStatistics = async (
+  projectIds?: string[]
+): Promise<ProjectStatistics> => {
+  try {
+    // Debug input
+    console.log(`API Call - Project Statistics - projectIds:`, projectIds);
+
+    // Build query parameters
+    const params = new URLSearchParams();
+
+    if (projectIds && projectIds.length > 0) {
+      params.append("projectIds", projectIds.join(","));
+    }
+
+    // Build URL for debugging
+    const url = `${API_BASE_URL}/analytics/project-statistics?${params.toString()}`;
+    console.log(`API Call - Project Statistics - URL:`, url);
+
+    const response = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
+
+    console.log(
+      `API Call - Project Statistics - Response status:`,
+      response.status,
+      response.statusText
+    );
+
+    // Let's clone the response so we can read it twice
+    const responseClone = response.clone();
+
+    // Get raw text for debugging
+    const responseText = await responseClone.text();
+    console.log(`API Call - Project Statistics - Raw response:`, responseText);
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch project statistics: ${response.status} - ${responseText}`
+      );
+    }
+
+    // Parse the response
+    let data: ProjectStatistics;
+    try {
+      if (responseText.trim()) {
+        data = JSON.parse(responseText);
+      } else {
+        console.warn("Empty response from project statistics endpoint");
+        data = {
+          totalTasks: 0,
+          completedTasks: 0,
+          completionRate: 0,
+          tasksByProject: {},
+        };
+      }
+    } catch (parseError) {
+      console.error("Error parsing project statistics response:", parseError);
+      data = {
+        totalTasks: 0,
+        completedTasks: 0,
+        completionRate: 0,
+        tasksByProject: {},
+      };
+    }
+
+    console.log("API Call - Project Statistics - Parsed data:", data);
+
+    return data;
+  } catch (error) {
+    console.error("Error fetching project statistics:", error);
+    // Return empty data rather than throwing to prevent UI crashes
+    return {
+      totalTasks: 0,
+      completedTasks: 0,
+      completionRate: 0,
+      tasksByProject: {},
+    };
+  }
+};

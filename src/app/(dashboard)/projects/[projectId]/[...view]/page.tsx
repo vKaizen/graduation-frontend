@@ -1,9 +1,14 @@
 import { ProjectView } from "@/components/projects/ProjectView";
 
-export default function Project({ params }: Readonly<{ params: { projectId: string; view?: string[] } }>) {
-    return (
-        <div className="flex flex-col h-screen bg-black overflow-hidden">
-            <ProjectView projectId={params.projectId} view={params.view?.[0]} />
-        </div>
-    );
+export default async function Project({
+  params,
+}: Readonly<{ params: { projectId: string; view?: string[] } }>) {
+  const projectId = params.projectId;
+  const view = params.view?.[0];
+
+  return (
+    <div className="flex flex-col h-screen bg-black overflow-hidden">
+      <ProjectView projectId={projectId} view={view} />
+    </div>
+  );
 }

@@ -309,6 +309,7 @@ export function TaskDetails({
                     onUpdate(task.id, {
                       ...task,
                       completed: !task.completed,
+                      status: !task.completed ? "completed" : "not started",
                     });
                   }}
                 >
@@ -1061,14 +1062,35 @@ export function TaskDetails({
                     size="sm"
                     className="text-neutral-200 border-neutral-700 hover:bg-neutral-800 hover:text-neutral-100 h-8"
                     onClick={() => {
+                      // Update the selected subtask's completed status
+                      const updatedSubtasks = task.subtasks.map((st) =>
+                        st.id === selectedSubtask.id
+                          ? { ...st, completed: !selectedSubtask.completed }
+                          : st
+                      );
+
+                      // Check if all subtasks would be completed after this update
+                      const allSubtasksCompleted = updatedSubtasks.every(
+                        (st) => st.completed
+                      );
+
+                      // Get current timestamp for completedAt if all subtasks are completed
+                      const now = new Date();
+
+                      // Update the task with the new subtasks array and possibly update the task status
                       onUpdate(task.id, {
                         ...task,
-                        subtasks: task.subtasks.map((st) =>
-                          st.id === selectedSubtask.id
-                            ? { ...st, completed: !selectedSubtask.completed }
-                            : st
-                        ),
+                        subtasks: updatedSubtasks,
+                        // If all subtasks are completed, mark the parent task as completed too
+                        status: allSubtasksCompleted
+                          ? "completed"
+                          : task.status,
+                        // If all subtasks are completed, set completedAt to now
+                        completedAt: allSubtasksCompleted
+                          ? now.toISOString()
+                          : task.completedAt,
                       });
+
                       setSelectedSubtask({
                         ...selectedSubtask,
                         completed: !selectedSubtask.completed,
