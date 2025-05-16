@@ -12,20 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  ChevronLeft,
-  ChevronDown,
-  User2,
-  Calendar,
-  Sparkles,
-} from "lucide-react";
-import Link from "next/link";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Sparkles } from "lucide-react";
 import {
   createGoal,
   fetchUsers,
   fetchProjects,
   fetchWorkspaces,
+  fetchWorkspaceMembers,
+  fetchUserById,
 } from "@/api-service";
 import type {
   User,
@@ -35,10 +29,25 @@ import type {
   GoalTimeframe,
 } from "@/types";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/contexts/AuthContext";
+import { GoalCreationLayout } from "./GoalCreationLayout";
+import { GoalMembersForm } from "./goal-members-form";
 
 export function NewGoalForm() {
   const router = useRouter();
+  const { currentWorkspace } = useWorkspace();
+  const { authState } = useAuth(); // Get authenticated user from AuthContext
+
+  // Debug log for authentication state
+  console.log("NewGoalForm - Auth state:", {
+    isAuthenticated: !!authState.accessToken,
+    userId: authState.userId,
+    username: authState.username,
+  });
+
+  const [currentStep, setCurrentStep] = useState<"details" | "members">(
+    "details"
+  );
   const [goalTitle, setGoalTitle] = useState("");
   const [goalDescription, setGoalDescription] = useState("");
   const [selectedTimeframe, setSelectedTimeframe] =
@@ -46,19 +55,21 @@ export function NewGoalForm() {
   const [selectedTimeframeYear, setSelectedTimeframeYear] = useState<number>(
     new Date().getFullYear()
   );
-  const [progressSource, setProgressSource] = useState<"manual" | "projects">(
-    "projects"
-  );
   const [selectedWorkspace, setSelectedWorkspace] = useState<string>("");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [progressSource, setProgressSource] = useState<
+    "projects" | "tasks" | "none"
+  >("none");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const { currentWorkspace } = useWorkspace();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Time periods
   const TIME_PERIODS = [
@@ -87,6 +98,40 @@ export function NewGoalForm() {
         setUsers(userData);
         setProjects(projectData);
 
+        // Find the authenticated user in the users array
+        if (authState.userId) {
+          console.log(
+            "Looking for authenticated user with ID:",
+            authState.userId
+          );
+          const authenticatedUser = userData.find(
+            (user) => user._id === authState.userId
+          );
+
+          if (authenticatedUser) {
+            console.log("Found authenticated user:", authenticatedUser);
+            setCurrentUser(authenticatedUser);
+          } else {
+            console.warn(
+              "Authenticated user not found in users array. Will try to fetch directly."
+            );
+            try {
+              // If not found in the users array, try to fetch the user directly
+              const user = await fetchUserById(authState.userId);
+              if (user) {
+                console.log("Fetched authenticated user:", user);
+                setCurrentUser(user);
+              } else {
+                console.error("Could not fetch authenticated user");
+              }
+            } catch (err) {
+              console.error("Error fetching authenticated user:", err);
+            }
+          }
+        } else {
+          console.warn("No authenticated user ID available");
+        }
+
         // If the current workspace is available from the context, use it
         if (currentWorkspace) {
           setSelectedWorkspace(currentWorkspace._id);
@@ -104,16 +149,81 @@ export function NewGoalForm() {
     };
 
     loadData();
-  }, [currentWorkspace]);
+  }, [currentWorkspace, authState.userId]);
 
-  const handleSubmit = async () => {
+  // Fetch workspace members when selected workspace changes
+  useEffect(() => {
+    const loadWorkspaceMembers = async () => {
+      if (!selectedWorkspace) return;
+
+      try {
+        console.log("Fetching members for workspace:", selectedWorkspace);
+        const workspaceMembers = await fetchWorkspaceMembers(selectedWorkspace);
+        console.log("Fetched workspace members:", workspaceMembers);
+
+        if (workspaceMembers.length > 0) {
+          // Update users list with workspace members to ensure they're available
+          setUsers((prevUsers) => {
+            // Create a map of existing users by ID for quick lookup
+            const userMap = new Map(prevUsers.map((user) => [user._id, user]));
+
+            // Add any workspace members that aren't already in the list
+            workspaceMembers.forEach((member) => {
+              if (!userMap.has(member._id)) {
+                userMap.set(member._id, member);
+              }
+            });
+
+            // Convert map back to array
+            return Array.from(userMap.values());
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching workspace members:", error);
+      }
+    };
+
+    loadWorkspaceMembers();
+  }, [selectedWorkspace]);
+
+  // Debug the users array whenever it changes
+  useEffect(() => {
+    console.log("Users array updated:", users);
+    console.log("Current user:", currentUser);
+  }, [users, currentUser]);
+
+  // Debug selectedMembers changes
+  useEffect(() => {
+    console.log("Parent component - selectedMembers updated:", selectedMembers);
+  }, [selectedMembers]);
+
+  const validateFirstStep = () => {
     if (!goalTitle.trim()) {
       setError("Please enter a goal title");
-      return;
+      return false;
     }
 
     if (!selectedWorkspace) {
       setError("Please select a workspace");
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleContinue = () => {
+    if (validateFirstStep()) {
+      setError("");
+      setCurrentStep("members");
+    }
+  };
+
+  const handleBack = () => {
+    setCurrentStep("details");
+  };
+
+  const handleSubmit = async () => {
+    if (!validateFirstStep()) {
       return;
     }
 
@@ -121,13 +231,27 @@ export function NewGoalForm() {
     setError("");
 
     try {
-      // Get current user ID
-      // For demo purposes, we'll use the first user in the list
-      const currentUserId = users.length > 0 ? users[0]._id : "";
+      console.log("=== STARTING GOAL CREATION ===");
+      console.log("Selected members before creation:", selectedMembers);
+
+      // Get current user ID - prioritize the authenticated user ID from authState
+      const currentUserId = authState.userId || currentUser?._id;
 
       if (!currentUserId) {
         throw new Error("No user found to set as owner");
       }
+
+      console.log("Creating goal with owner ID:", currentUserId);
+
+      // Ensure we have at least one member (even if it's just the current user)
+      let membersList = [currentUserId]; // Always include the current user
+
+      if (isPrivate && selectedMembers.length > 0) {
+        // Add any other selected members
+        membersList = [...new Set([...selectedMembers, currentUserId])];
+      }
+
+      console.log("Final members list for goal creation:", membersList);
 
       const goalData: CreateGoalDto = {
         title: goalTitle,
@@ -135,18 +259,33 @@ export function NewGoalForm() {
         ownerId: currentUserId,
         progress: 0, // Start at 0% progress
         status: "no-status",
-        isPrivate: false,
+        isPrivate: isPrivate,
         timeframe: selectedTimeframe,
         timeframeYear: selectedTimeframeYear,
         workspaceId: selectedWorkspace,
-        projects: selectedProjects.length > 0 ? selectedProjects : undefined,
+        projects:
+          progressSource === "projects" &&
+          selectedProjects.length > 0 &&
+          selectedProjects[0] !== "placeholder"
+            ? selectedProjects
+            : undefined,
+        progressSource: progressSource,
+        members: membersList, // Use the updated members list
       };
 
+      console.log("Creating goal with data:", goalData);
+      console.log("Progress source:", progressSource);
+      console.log("Selected members:", selectedMembers);
+      console.log("Members field in goal data:", goalData.members);
+
       const newGoal = await createGoal(goalData);
+      console.log("Created goal response:", newGoal);
 
       if (newGoal && newGoal._id) {
         // Redirect to the goals page
-        router.push(`/insights/goals/my-goals`);
+        router.push(
+          `/insights/goals/${isPrivate ? "my-goals" : "workspace-goals"}`
+        );
       } else {
         setError("Failed to create goal");
       }
@@ -174,267 +313,300 @@ export function NewGoalForm() {
     }, 1500);
   };
 
+  if (currentStep === "members") {
+    // Use the GoalMembersForm component instead of inline implementation
+    console.log("Rendering GoalMembersForm");
+    console.log("All users available:", users);
+
+    return (
+      <GoalMembersForm
+        onBack={handleBack}
+        onSubmit={handleSubmit}
+        isLoading={isLoading}
+        error={error}
+        currentUser={currentUser}
+        workspaceUsers={users}
+        selectedMembers={selectedMembers}
+        setSelectedMembers={setSelectedMembers}
+        isPrivate={isPrivate}
+        setIsPrivate={setIsPrivate}
+        goalTitle={goalTitle}
+        selectedTimeframe={selectedTimeframe}
+        selectedTimeframeYear={selectedTimeframeYear}
+        progressSource={progressSource}
+      />
+    );
+  }
+
   return (
-    <div className="flex min-h-screen bg-[#1E1E1E]">
-      {/* Header */}
-      <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4">
-        <Link href="/insights/goals/my-goals">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-gray-400 hover:text-white"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-        </Link>
+    <GoalCreationLayout
+      title="New goal"
+      backUrl="/insights/goals/my-goals"
+      goalTitle={goalTitle}
+      goalDescription={goalDescription}
+      selectedTimeframe={selectedTimeframe}
+      selectedTimeframeYear={selectedTimeframeYear}
+      selectedProjects={progressSource === "projects" ? selectedProjects : []}
+      projects={projects}
+      currentUser={currentUser}
+      progressSource={progressSource}
+    >
+      {/* Title input */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <label htmlFor="title" className="text-sm font-medium text-white">
+            Title
+          </label>
+          <span className="text-red-500">*</span>
+        </div>
+        <Input
+          id="title"
+          value={goalTitle}
+          onChange={(e) => setGoalTitle(e.target.value)}
+          placeholder="Enter goal title"
+          className="bg-[#252525] border-[#353535] text-white"
+        />
       </div>
 
-      {/* Main content */}
-      <div className="flex flex-1 items-center justify-center">
-        <div className="w-full max-w-7xl flex px-4">
-          {/* Form column - reduced from 50% to 40% */}
-          <div className="w-full lg:w-2/5 p-4">
-            <div className="py-8 space-y-6">
-              <h1 className="text-3xl font-bold text-white">New goal</h1>
+      {/* Description textarea */}
+      <div className="space-y-2">
+        <label htmlFor="description" className="text-sm font-medium text-white">
+          Description
+        </label>
+        <div className="relative">
+          <Textarea
+            id="description"
+            value={goalDescription}
+            onChange={(e) => setGoalDescription(e.target.value)}
+            placeholder="What is this goal about?"
+            className="bg-[#252525] border-[#353535] text-white min-h-[120px]"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={generateDescription}
+            disabled={isGenerating}
+            className="absolute bottom-2 left-2 text-gray-400 hover:text-white flex items-center gap-1"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>Generate</span>
+          </Button>
+        </div>
+      </div>
 
-              {/* Title input */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <label
-                    htmlFor="title"
-                    className="text-sm font-medium text-white"
-                  >
-                    Title
-                  </label>
-                  <span className="text-red-500">*</span>
+      {/* Time period selector */}
+      <div className="space-y-2">
+        <label htmlFor="timeframe" className="text-sm font-medium text-white">
+          Time period
+        </label>
+        <div className="flex flex-wrap gap-3">
+          <Select
+            value={selectedTimeframe}
+            onValueChange={(value) =>
+              setSelectedTimeframe(value as GoalTimeframe)
+            }
+          >
+            <SelectTrigger className="w-32 bg-[#252525] border-[#353535] text-white">
+              <SelectValue placeholder="Select period" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#252525] border-[#353535] text-white">
+              {TIME_PERIODS.map((period) => (
+                <SelectItem
+                  key={period.value}
+                  value={period.value}
+                  className="hover:bg-[#353535]"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span>{period.label}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={selectedTimeframeYear.toString()}
+            onValueChange={(value) => setSelectedTimeframeYear(parseInt(value))}
+          >
+            <SelectTrigger className="w-24 bg-[#252525] border-[#353535] text-white">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#252525] border-[#353535] text-white">
+              {[2023, 2024, 2025, 2026, 2027].map((year) => (
+                <SelectItem
+                  key={year}
+                  value={year.toString()}
+                  className="hover:bg-[#353535]"
+                >
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="text-xs text-gray-400">
+          {
+            TIME_PERIODS.find((period) => period.value === selectedTimeframe)
+              ?.dates
+          }
+        </div>
+      </div>
+
+      {/* Workspace selector */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <label htmlFor="workspace" className="text-sm font-medium text-white">
+            Workspace
+          </label>
+          <span className="text-red-500">*</span>
+        </div>
+        <Select
+          value={selectedWorkspace}
+          onValueChange={setSelectedWorkspace}
+          disabled={isLoadingWorkspaces || workspaces.length === 0}
+        >
+          <SelectTrigger className="w-full bg-[#252525] border-[#353535] text-white">
+            <SelectValue placeholder="Select workspace" />
+          </SelectTrigger>
+          <SelectContent className="bg-[#252525] border-[#353535] text-white">
+            {workspaces.map((workspace) => (
+              <SelectItem
+                key={workspace._id}
+                value={workspace._id}
+                className="hover:bg-[#353535]"
+              >
+                {workspace.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Progress source */}
+      <div className="space-y-2">
+        <label
+          htmlFor="progress-source"
+          className="text-sm font-medium text-white"
+        >
+          Progress source
+        </label>
+        <div className="space-y-2 mt-2">
+          <div className="flex flex-col space-y-2">
+            {/* Projects option */}
+            <div
+              className={`flex items-center p-3 rounded-md cursor-pointer ${
+                progressSource === "projects"
+                  ? "bg-[#353535]"
+                  : "bg-[#252525] hover:bg-[#303030]"
+              }`}
+              onClick={() => {
+                setProgressSource("projects");
+                // If no projects are selected yet, add a placeholder to indicate projects are selected
+                if (selectedProjects.length === 0) {
+                  setSelectedProjects(["placeholder"]);
+                }
+              }}
+            >
+              <div className="flex items-center flex-1">
+                <div
+                  className={`w-4 h-4 rounded-full mr-3 border ${
+                    progressSource === "projects"
+                      ? "border-[#4573D2] bg-[#4573D2]"
+                      : "border-gray-400"
+                  }`}
+                ></div>
+                <div className="flex flex-col">
+                  <span className="text-white font-medium">Projects</span>
+                  <span className="text-gray-400 text-xs">
+                    Goal progress will be calculated from linked projects
+                  </span>
                 </div>
-                <Input
-                  id="title"
-                  value={goalTitle}
-                  onChange={(e) => setGoalTitle(e.target.value)}
-                  placeholder="Enter goal title"
-                  className="bg-[#252525] border-[#353535] text-white"
-                />
               </div>
+              {progressSource === "projects" &&
+                selectedProjects.length > 0 &&
+                selectedProjects[0] !== "placeholder" && (
+                  <div className="text-sm text-gray-400">
+                    {selectedProjects.length} project
+                    {selectedProjects.length !== 1 ? "s" : ""} selected
+                  </div>
+                )}
+            </div>
 
-              {/* Description textarea */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="description"
-                  className="text-sm font-medium text-white"
-                >
-                  Description
-                </label>
-                <div className="relative">
-                  <Textarea
-                    id="description"
-                    value={goalDescription}
-                    onChange={(e) => setGoalDescription(e.target.value)}
-                    placeholder="What is this goal about?"
-                    className="bg-[#252525] border-[#353535] text-white min-h-[120px]"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={generateDescription}
-                    disabled={isGenerating}
-                    className="absolute bottom-2 left-2 text-gray-400 hover:text-white flex items-center gap-1"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    <span>Generate</span>
-                  </Button>
+            {/* Tasks option */}
+            <div
+              className={`flex items-center p-3 rounded-md cursor-pointer ${
+                progressSource === "tasks"
+                  ? "bg-[#353535]"
+                  : "bg-[#252525] hover:bg-[#303030]"
+              }`}
+              onClick={() => {
+                setProgressSource("tasks");
+                // Clear project selection when selecting tasks
+                setSelectedProjects([]);
+              }}
+            >
+              <div className="flex items-center flex-1">
+                <div
+                  className={`w-4 h-4 rounded-full mr-3 border ${
+                    progressSource === "tasks"
+                      ? "border-[#4573D2] bg-[#4573D2]"
+                      : "border-gray-400"
+                  }`}
+                ></div>
+                <div className="flex flex-col">
+                  <span className="text-white font-medium">Tasks</span>
+                  <span className="text-gray-400 text-xs">
+                    Goal progress will be calculated from linked tasks
+                  </span>
                 </div>
-              </div>
-
-              {/* Time period selector */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="timePeriod"
-                  className="text-sm font-medium text-white"
-                >
-                  Time period
-                </label>
-                <div className="relative">
-                  <Select
-                    value={selectedTimeframe}
-                    onValueChange={(value) =>
-                      setSelectedTimeframe(value as GoalTimeframe)
-                    }
-                  >
-                    <SelectTrigger className="w-full bg-[#252525] border-[#353535] text-white">
-                      <div className="flex items-center justify-between w-full">
-                        <SelectValue placeholder="Select time period" />
-                        <div className="text-gray-400 text-xs">
-                          {selectedTimeframe === "Q2" ? "Apr 1 — Jun 30" : ""}
-                        </div>
-                      </div>
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#252525] border-[#353535] text-white">
-                      {TIME_PERIODS.map((period) => (
-                        <SelectItem key={period.value} value={period.value}>
-                          <div className="flex items-center justify-between w-full">
-                            <span>{period.label}</span>
-                            <span className="text-gray-400 text-xs ml-4">
-                              {period.dates}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Progress source */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="progressSource"
-                  className="text-sm font-medium text-white"
-                >
-                  Progress source
-                </label>
-                <Select
-                  value={progressSource}
-                  onValueChange={(value) =>
-                    setProgressSource(value as "manual" | "projects")
-                  }
-                >
-                  <SelectTrigger className="w-full bg-[#252525] border-[#353535] text-white">
-                    <SelectValue>
-                      <div className="flex items-center">
-                        {progressSource === "projects"
-                          ? "Projects"
-                          : "Manual updates"}
-                      </div>
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#252525] border-[#353535] text-white">
-                    <SelectItem value="projects">Projects</SelectItem>
-                    <SelectItem value="manual">Manual updates</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Error message */}
-              {error && <div className="text-red-500 text-sm">{error}</div>}
-
-              {/* Action buttons */}
-              <div className="pt-4">
-                <Button
-                  onClick={handleSubmit}
-                  disabled={isLoading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {isLoading ? "Creating..." : "Continue"}
-                </Button>
               </div>
             </div>
-          </div>
 
-          {/* Preview column - increased from 50% to 60% */}
-          <div className="hidden lg:flex lg:w-3/5 p-6 items-center justify-center">
-            <div className="bg-[#1A1A1A] rounded-lg p-8 w-full max-w-xl">
-              <div className="space-y-6">
-                <h2 className="text-lg font-medium text-gray-400">Preview</h2>
-
-                {/* Preview content */}
-                <div className="bg-[#252525] rounded-xl p-6 shadow-md">
-                  {/* Goal title */}
-                  <div className="flex items-center text-white font-medium text-lg mb-6">
-                    {goalTitle || "Title"}
-                    <span className="ml-2 text-gray-500">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <rect
-                          x="3"
-                          y="11"
-                          width="18"
-                          height="11"
-                          rx="2"
-                          ry="2"
-                        ></rect>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                      </svg>
-                    </span>
-                    <div className="ml-auto text-sm text-gray-400">Members</div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="mb-10">
-                    <Progress value={0} className="h-1.5 bg-[#353535]" />
-                  </div>
-
-                  {/* Connected projects section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center text-white">
-                      <ChevronDown className="h-4 w-4 mr-2" />
-                      <span>Connected projects</span>
-                    </div>
-
-                    {/* Example projects */}
-                    {Array.from({ length: 3 }).map((_, index) => (
-                      <div key={index} className="flex items-center pl-6">
-                        <div
-                          className={`w-2 h-2 rounded-full mr-2 ${
-                            index === 0
-                              ? "bg-blue-400"
-                              : index === 1
-                              ? "bg-yellow-400"
-                              : "bg-red-400"
-                          }`}
-                        ></div>
-                        <span className="text-white">Example project</span>
-
-                        <div className="ml-auto flex items-center">
-                          <Progress
-                            value={index === 0 ? 75 : index === 1 ? 40 : 90}
-                            className="w-24 h-1.5 mr-2 bg-[#353535]"
-                          />
-                          <Avatar className="h-6 w-6">
-                            <AvatarFallback className="bg-[#404040] text-xs">
-                              {index === 0 ? "KA" : index === 1 ? "JD" : "MS"}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Description preview */}
-                  <div className="mt-10 space-y-2">
-                    <div className="text-white mb-2">Description</div>
-                    <div className="h-3 bg-[#353535] rounded w-full"></div>
-                    <div className="h-3 bg-[#353535] rounded w-3/4"></div>
-                    <div className="h-3 bg-[#353535] rounded w-5/6"></div>
-                    <div className="h-3 bg-[#353535] rounded w-2/3"></div>
-                  </div>
-                </div>
-
-                {/* Time period indicator */}
-                <div className="flex items-center gap-3 text-gray-400">
-                  <Calendar className="h-5 w-5" />
-                  <div className="flex flex-col">
-                    <span className="text-white">Time period</span>
-                    <span className="text-sm">
-                      {selectedTimeframe} {selectedTimeframeYear}
-                    </span>
-                  </div>
+            {/* None option */}
+            <div
+              className={`flex items-center p-3 rounded-md cursor-pointer ${
+                progressSource === "none"
+                  ? "bg-[#353535]"
+                  : "bg-[#252525] hover:bg-[#303030]"
+              }`}
+              onClick={() => {
+                setProgressSource("none");
+                // Clear project selection when selecting none
+                setSelectedProjects([]);
+              }}
+            >
+              <div className="flex items-center flex-1">
+                <div
+                  className={`w-4 h-4 rounded-full mr-3 border ${
+                    progressSource === "none"
+                      ? "border-[#4573D2] bg-[#4573D2]"
+                      : "border-gray-400"
+                  }`}
+                ></div>
+                <div className="flex flex-col">
+                  <span className="text-white font-medium">None</span>
+                  <span className="text-gray-400 text-xs">
+                    Goal progress requires manual updates
+                  </span>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Error message */}
+      {error && <div className="text-red-500 text-sm">{error}</div>}
+
+      {/* Continue button */}
+      <Button
+        onClick={handleContinue}
+        className="w-full bg-[#4573D2] hover:bg-[#3A62B3]"
+        disabled={isLoading}
+      >
+        Continue
+      </Button>
+    </GoalCreationLayout>
   );
 }

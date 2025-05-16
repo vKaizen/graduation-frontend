@@ -1233,10 +1233,55 @@ export const createProjectInWorkspace = async (
 
 // Add the fetch tasks by workspace function
 export const fetchTasksByWorkspace = async (
-  workspaceId: string
+  workspaceId: string | Record<string, any>
 ): Promise<Task[]> => {
   try {
-    console.log(`Fetching tasks for workspace ${workspaceId}`);
+    // Handle the case where workspaceId is an object
+    let workspaceIdString: string = "";
+
+    if (typeof workspaceId === "object" && workspaceId !== null) {
+      console.log(`Workspace ID is an object:`, workspaceId);
+
+      // Try different ways to get the ID as a string
+      if (workspaceId._id) {
+        workspaceIdString =
+          typeof workspaceId._id === "string"
+            ? workspaceId._id
+            : workspaceId._id.toString();
+      } else if (workspaceId.id) {
+        workspaceIdString =
+          typeof workspaceId.id === "string"
+            ? workspaceId.id
+            : workspaceId.id.toString();
+      } else if (
+        workspaceId.toString &&
+        typeof workspaceId.toString === "function" &&
+        workspaceId.toString() !== "[object Object]"
+      ) {
+        // Use toString() if it returns something other than "[object Object]"
+        workspaceIdString = workspaceId.toString();
+      }
+
+      console.log(
+        `Converted workspace ID object to string: ${workspaceIdString}`
+      );
+
+      // Check if we got a valid ID
+      if (!workspaceIdString || workspaceIdString === "[object Object]") {
+        console.error(
+          "Could not extract a valid ID from workspace object:",
+          workspaceId
+        );
+        return []; // Return empty array to prevent UI errors
+      }
+    } else if (workspaceId) {
+      workspaceIdString = String(workspaceId); // Cast to string for safety
+    } else {
+      console.error("No workspace ID provided to fetchTasksByWorkspace");
+      return []; // Return empty array to prevent UI errors
+    }
+
+    console.log(`Fetching tasks for workspace ${workspaceIdString}`);
     const headers = getAuthHeaders();
 
     // Debug log
@@ -1246,7 +1291,7 @@ export const fetchTasksByWorkspace = async (
     }
 
     const response = await fetch(
-      `${API_BASE_URL}/workspaces/${workspaceId}/tasks`,
+      `${API_BASE_URL}/workspaces/${workspaceIdString}/tasks`,
       {
         headers,
       }
@@ -2082,6 +2127,8 @@ export const fetchGoals = async (filters?: {
   status?: string[];
   timeframe?: string;
   timeframeYear?: number;
+  isPrivate?: boolean;
+  userId?: string;
 }): Promise<Goal[]> => {
   try {
     // Build query string from filters
@@ -2097,20 +2144,45 @@ export const fetchGoals = async (filters?: {
       if (filters.timeframe) queryParams.append("timeframe", filters.timeframe);
       if (filters.timeframeYear)
         queryParams.append("timeframeYear", filters.timeframeYear.toString());
+      if (filters.isPrivate !== undefined)
+        queryParams.append("isPrivate", filters.isPrivate.toString());
+      if (filters.userId) queryParams.append("userId", filters.userId);
     }
 
     const queryString = queryParams.toString();
     const url = `${API_BASE_URL}/goals${queryString ? `?${queryString}` : ""}`;
 
+    console.log("fetchGoals: Making request to URL:", url);
+
+    // Debug auth headers
+    const headers = getAuthHeaders();
+    console.log(
+      "fetchGoals: Authorization header present:",
+      !!headers.Authorization
+    );
+
+    if (!headers.Authorization) {
+      console.warn(
+        "fetchGoals: No authorization token found - authentication may fail"
+      );
+    }
+
     const response = await fetch(url, {
       headers: getAuthHeaders(),
     });
+
+    console.log(
+      "fetchGoals: Response status:",
+      response.status,
+      response.statusText
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to fetch goals: ${response.statusText}`);
     }
 
     const goals = await response.json();
+    console.log(`fetchGoals: Received ${goals?.length || 0} goals`);
     return goals;
   } catch (error) {
     console.error("Error fetching goals:", error);
@@ -2120,6 +2192,9 @@ export const fetchGoals = async (filters?: {
 
 export const createGoal = async (goalData: CreateGoalDto): Promise<Goal> => {
   try {
+    console.log("Creating goal with data:", JSON.stringify(goalData, null, 2));
+    console.log("Members array in createGoal:", goalData.members);
+
     const response = await fetch(`${API_BASE_URL}/goals`, {
       method: "POST",
       headers: getAuthHeaders(),
@@ -2128,10 +2203,14 @@ export const createGoal = async (goalData: CreateGoalDto): Promise<Goal> => {
 
     if (!response.ok) {
       const errorData = await response.json();
+      console.error("Error response from goal creation:", errorData);
       throw new Error(errorData.message || "Failed to create goal");
     }
 
-    return response.json();
+    const createdGoal = await response.json();
+    console.log("Created goal successfully:", createdGoal);
+    console.log("Members in created goal:", createdGoal.members);
+    return createdGoal;
   } catch (error) {
     console.error("Error creating goal:", error);
     throw error;
@@ -2180,6 +2259,7 @@ export const deleteGoal = async (goalId: string): Promise<void> => {
 
 export const fetchGoalHierarchy = async (options?: {
   workspaceId?: string;
+  isPrivate?: boolean;
 }): Promise<Goal[]> => {
   try {
     console.log("API SERVICE: Fetching goal hierarchy...");
@@ -2188,6 +2268,8 @@ export const fetchGoalHierarchy = async (options?: {
     if (options) {
       if (options.workspaceId)
         queryParams.append("workspaceId", options.workspaceId);
+      if (options.isPrivate !== undefined)
+        queryParams.append("isPrivate", options.isPrivate.toString());
     }
 
     const queryString = queryParams.toString();
@@ -2631,5 +2713,63 @@ export const fetchProjectStatistics = async (
       completionRate: 0,
       tasksByProject: {},
     };
+  }
+};
+
+export const fetchGoalById = async (goalId: string): Promise<Goal> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/goals/${goalId}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch goal: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error fetching goal:", error);
+    throw error;
+  }
+};
+
+export const fetchTasks = async (filters?: {
+  projectId?: string;
+  sectionId?: string;
+  assigneeId?: string;
+  status?: string;
+  workspaceId?: string;
+}): Promise<Task[]> => {
+  try {
+    // Build query string from filters
+    let queryParams = new URLSearchParams();
+
+    if (filters) {
+      if (filters.projectId) queryParams.append("projectId", filters.projectId);
+      if (filters.sectionId) queryParams.append("sectionId", filters.sectionId);
+      if (filters.assigneeId)
+        queryParams.append("assigneeId", filters.assigneeId);
+      if (filters.status) queryParams.append("status", filters.status);
+      if (filters.workspaceId)
+        queryParams.append("workspaceId", filters.workspaceId);
+    }
+
+    const queryString = queryParams.toString();
+    const url = `${API_BASE_URL}/tasks${queryString ? `?${queryString}` : ""}`;
+
+    const response = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch tasks: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error fetching tasks:", error);
+    throw error;
   }
 };

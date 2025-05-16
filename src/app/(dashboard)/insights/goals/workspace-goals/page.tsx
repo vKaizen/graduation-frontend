@@ -7,50 +7,57 @@ import { GoalTableView } from "@/components/insights/GoalTableView";
 import { Goal } from "@/types";
 import { fetchGoals } from "@/api-service";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { useAuth } from "@/contexts/AuthContext";
 
-export default function MyGoalsPage() {
+export default function WorkspaceGoalsPage() {
   const router = useRouter();
   const { currentWorkspace } = useWorkspace();
-  const { authState } = useAuth();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadGoals = async () => {
-      if (!currentWorkspace || !authState.userId) return;
+      if (!currentWorkspace) return;
 
-      console.log("My Goals - Loading goals for user:", authState.userId);
-      console.log("My Goals - Current workspace:", currentWorkspace._id);
+      console.log(
+        "Workspace Goals - Loading goals for workspace:",
+        currentWorkspace._id
+      );
 
       setIsLoading(true);
       setError(null);
 
       try {
-        // Fetch all private goals in the workspace
-        // The backend will automatically filter by the current user's ID from the JWT token
-        console.log("My Goals - Fetching private goals with params:", {
-          workspaceId: currentWorkspace._id,
-          isPrivate: true,
-        });
+        // Only fetch workspace goals (non-private goals) for the current workspace
+        console.log(
+          "Workspace Goals - Fetching non-private goals with params:",
+          {
+            workspaceId: currentWorkspace._id,
+            isPrivate: false,
+          }
+        );
 
         const fetchedGoals = await fetchGoals({
           workspaceId: currentWorkspace._id,
-          isPrivate: true,
-          // Do not pass userId explicitly - the backend extracts it from the JWT token
+          isPrivate: false,
         });
 
-        console.log("My Goals - Fetched goals:", fetchedGoals);
-        console.log(
-          `My Goals - Number of goals returned: ${fetchedGoals.length}`
-        );
+        console.log("Workspace Goals - Fetched goals:", fetchedGoals);
+        console.log("Workspace Goals - Number of goals:", fetchedGoals.length);
 
-        // Set all fetched private goals directly
+        if (fetchedGoals.length > 0) {
+          console.log("Workspace Goals - First goal:", fetchedGoals[0]);
+          console.log(
+            "Workspace Goals - First goal isPrivate:",
+            fetchedGoals[0].isPrivate
+          );
+        }
+
         setGoals(fetchedGoals);
       } catch (err) {
-        console.error("Error fetching my goals:", err);
-        setError("Failed to load your goals. Please try again.");
+        console.error("Error fetching workspace goals:", err);
+        setError("Failed to load workspace goals. Please try again.");
+        // Fallback to empty array
         setGoals([]);
       } finally {
         setIsLoading(false);
@@ -58,13 +65,15 @@ export default function MyGoalsPage() {
     };
 
     loadGoals();
-  }, [currentWorkspace, authState.userId]);
+  }, [currentWorkspace]);
 
   const handleCreateGoal = () => {
+    // Navigate to the new goal creation page
     router.push("/goals/new");
   };
 
   const handleGoalClick = (goal: Goal) => {
+    // Navigate to goal details page
     console.log("Goal clicked:", goal);
     router.push(`/insights/goals/${goal._id}`);
   };
@@ -74,11 +83,11 @@ export default function MyGoalsPage() {
       workspaceName={currentWorkspace?.name || "My workspace"}
       onCreateGoal={handleCreateGoal}
       showFilter={true}
-      filterText="Filter: My goals"
+      filterText="Filter: Workspace goals"
     >
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
-          <div className="text-gray-400">Loading your goals...</div>
+          <div className="text-gray-400">Loading workspace goals...</div>
         </div>
       ) : error ? (
         <div className="flex items-center justify-center h-64">
@@ -86,10 +95,10 @@ export default function MyGoalsPage() {
         </div>
       ) : goals.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-center">
-          <div className="text-gray-400 mb-4">No personal goals found</div>
+          <div className="text-gray-400 mb-4">No workspace goals found</div>
           <div className="text-sm text-gray-500 max-w-md">
-            Personal goals are private to you and selected members. Create your
-            first personal goal to get started.
+            Workspace goals are visible to all workspace members. Create your
+            first workspace goal to get started.
           </div>
         </div>
       ) : (

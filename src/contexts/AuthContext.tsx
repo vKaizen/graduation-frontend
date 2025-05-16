@@ -45,12 +45,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = getAuthCookie();
     const userId = getUserIdCookie();
 
+    console.log("AuthContext: Initializing from cookies");
+    console.log("AuthContext: Token exists:", !!token);
+    console.log("AuthContext: UserId from cookie:", userId);
+
     if (token && userId) {
       setAuthState({
         accessToken: token,
         userId: userId,
         username: null, // We'll need to fetch this from the server or store it separately
       });
+      console.log("AuthContext: Set auth state with userId:", userId);
+    } else {
+      console.log("AuthContext: Missing token or userId in cookies");
     }
     setInitialized(true);
   }, []);

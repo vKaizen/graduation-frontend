@@ -18,11 +18,21 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { Avatar } from "@/components/ui/avatar";
+import { useRouter } from "next/navigation";
 
 // Custom node component for goals
 const GoalNode = ({ data }: { data: any }) => {
+  const router = useRouter();
+
+  const handleNodeClick = () => {
+    router.push(`/insights/goals/${data._id}`);
+  };
+
   return (
-    <div className="bg-[#1a1a1a] border border-[#353535] rounded-lg p-4 w-[250px] text-center flex flex-col items-center relative">
+    <div
+      className="bg-[#1a1a1a] border border-[#353535] rounded-lg p-4 w-[250px] text-center flex flex-col items-center relative cursor-pointer"
+      onClick={handleNodeClick}
+    >
       <div className="absolute top-2 right-2 text-xs text-gray-400">
         {data.progress}%
       </div>
@@ -51,7 +61,10 @@ const GoalNode = ({ data }: { data: any }) => {
 
       <div className="flex mt-3 space-x-2">
         <button
-          onClick={data.onEdit}
+          onClick={(e) => {
+            e.stopPropagation();
+            data.onEdit();
+          }}
           className="p-1 hover:bg-[#252525] rounded"
         >
           <Edit className="h-4 w-4 text-gray-400" />
@@ -96,7 +109,7 @@ export const StrategyMapView = ({
         setLoading(true);
         if (!initialRootGoal) {
           console.log("Fetching goal hierarchy from API");
-          const hierarchyData = await fetchGoalHierarchy();
+          const hierarchyData = await fetchGoalHierarchy({ isPrivate: false });
 
           if (Array.isArray(hierarchyData) && hierarchyData.length > 0) {
             console.log(

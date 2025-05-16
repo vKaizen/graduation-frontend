@@ -38,14 +38,14 @@ export const WorkspaceHeader = ({ workspaceName }: WorkspaceHeaderProps) => {
             Strategy map
           </Link>
           <Link
-            href="/insights/goals/team-goals"
+            href="/insights/goals/workspace-goals"
             className={`px-4 py-2 text-sm ${
-              pathname === "/insights/goals/team-goals"
+              pathname === "/insights/goals/workspace-goals"
                 ? "text-white border-b-2 border-[#4573D2]"
                 : "text-gray-400 hover:text-white"
             }`}
           >
-            Team goals
+            Workspace goals
           </Link>
           <Link
             href="/insights/goals/my-goals"

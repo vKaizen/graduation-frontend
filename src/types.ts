@@ -168,6 +168,8 @@ export interface Goal {
   dueDate?: string;
   projects?: string[];
   workspaceId?: string;
+  members?: string[];
+  progressSource?: "projects" | "tasks" | "none";
   children?: Goal[];
   owner?: User;
   workspace?: Workspace;
@@ -190,6 +192,8 @@ export interface CreateGoalDto {
   dueDate?: string;
   projects?: string[];
   workspaceId?: string;
+  members?: string[];
+  progressSource?: "projects" | "tasks" | "none";
 }
 
 export interface UpdateGoalDto {
@@ -207,4 +211,5 @@ export interface UpdateGoalDto {
   dueDate?: string;
   projects?: string[];
   workspaceId?: string;
+  progressSource?: "projects" | "tasks" | "none";
 }

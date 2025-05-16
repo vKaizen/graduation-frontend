@@ -1,4 +1,4 @@
-import TaskLayout from "@/components/task-layout"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Github, Linkedin, Mail } from "lucide-react"

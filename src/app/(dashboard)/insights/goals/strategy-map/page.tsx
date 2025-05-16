@@ -60,7 +60,8 @@ export default function StrategyMapPage() {
         setTimeout(() => reject(new Error("Request timed out")), 15000)
       );
 
-      const dataPromise = fetchGoalHierarchy();
+      // Only show non-private (workspace) goals in the strategy map
+      const dataPromise = fetchGoalHierarchy({ isPrivate: false });
 
       // Race between the actual fetch and the timeout
       const data = (await Promise.race([
