@@ -22,7 +22,7 @@ interface GoalCreationLayoutProps {
   isPrivate?: boolean;
   selectedMembers?: string[];
   workspaceUsers?: User[];
-  progressSource?: "projects" | "tasks" | "none";
+  progressResource?: "projects" | "tasks" | "none";
 }
 
 export function GoalCreationLayout({
@@ -40,7 +40,7 @@ export function GoalCreationLayout({
   isPrivate = false,
   selectedMembers = [],
   workspaceUsers = [],
-  progressSource = "none",
+  progressResource = "none",
 }: GoalCreationLayoutProps) {
   // Find the selected projects from the projects array
   const connectedProjects = projects.filter((project) =>
@@ -100,7 +100,7 @@ export function GoalCreationLayout({
               isPrivate={isPrivate}
               selectedMembers={selectedMembers}
               workspaceUsers={workspaceUsers}
-              progressSource={progressSource}
+              progressResource={progressResource}
             />
           </div>
         </div>

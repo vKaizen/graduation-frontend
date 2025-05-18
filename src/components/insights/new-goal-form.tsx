@@ -61,7 +61,7 @@ export function NewGoalForm() {
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-  const [progressSource, setProgressSource] = useState<
+  const [progressResource, setProgressResource] = useState<
     "projects" | "tasks" | "none"
   >("none");
   const [isLoading, setIsLoading] = useState(false);
@@ -226,33 +226,29 @@ export function NewGoalForm() {
     if (!validateFirstStep()) {
       return;
     }
-
+  
     setIsLoading(true);
     setError("");
-
+  
     try {
       console.log("=== STARTING GOAL CREATION ===");
       console.log("Selected members before creation:", selectedMembers);
-
+  
       // Get current user ID - prioritize the authenticated user ID from authState
       const currentUserId = authState.userId || currentUser?._id;
-
+  
       if (!currentUserId) {
         throw new Error("No user found to set as owner");
       }
-
+  
       console.log("Creating goal with owner ID:", currentUserId);
-
-      // Ensure we have at least one member (even if it's just the current user)
-      let membersList = [currentUserId]; // Always include the current user
-
-      if (isPrivate && selectedMembers.length > 0) {
-        // Add any other selected members
-        membersList = [...new Set([...selectedMembers, currentUserId])];
-      }
-
+  
+      // Merge owner + any selected members into one unique array
+      const membersList = Array.from(
+        new Set([currentUserId, ...selectedMembers])
+      );
       console.log("Final members list for goal creation:", membersList);
-
+  
       const goalData: CreateGoalDto = {
         title: goalTitle,
         description: goalDescription,
@@ -264,23 +260,23 @@ export function NewGoalForm() {
         timeframeYear: selectedTimeframeYear,
         workspaceId: selectedWorkspace,
         projects:
-          progressSource === "projects" &&
+          progressResource === "projects" &&
           selectedProjects.length > 0 &&
           selectedProjects[0] !== "placeholder"
             ? selectedProjects
             : undefined,
-        progressSource: progressSource,
-        members: membersList, // Use the updated members list
+        progressResource: progressResource,
+        members: membersList, // <— always include owner + selections
       };
-
+  
       console.log("Creating goal with data:", goalData);
-      console.log("Progress source:", progressSource);
+      console.log("Progress resource:", progressResource);
       console.log("Selected members:", selectedMembers);
       console.log("Members field in goal data:", goalData.members);
-
+  
       const newGoal = await createGoal(goalData);
       console.log("Created goal response:", newGoal);
-
+  
       if (newGoal && newGoal._id) {
         // Redirect to the goals page
         router.push(
@@ -300,6 +296,7 @@ export function NewGoalForm() {
       setIsLoading(false);
     }
   };
+  
 
   // Helper to generate a description using AI
   const generateDescription = () => {
@@ -333,7 +330,7 @@ export function NewGoalForm() {
         goalTitle={goalTitle}
         selectedTimeframe={selectedTimeframe}
         selectedTimeframeYear={selectedTimeframeYear}
-        progressSource={progressSource}
+        progressResource={progressResource}
       />
     );
   }
@@ -346,10 +343,10 @@ export function NewGoalForm() {
       goalDescription={goalDescription}
       selectedTimeframe={selectedTimeframe}
       selectedTimeframeYear={selectedTimeframeYear}
-      selectedProjects={progressSource === "projects" ? selectedProjects : []}
+      selectedProjects={progressResource === "projects" ? selectedProjects : []}
       projects={projects}
       currentUser={currentUser}
-      progressSource={progressSource}
+      progressResource={progressResource}
     >
       {/* Title input */}
       <div className="space-y-2">
@@ -496,12 +493,12 @@ export function NewGoalForm() {
             {/* Projects option */}
             <div
               className={`flex items-center p-3 rounded-md cursor-pointer ${
-                progressSource === "projects"
+                progressResource === "projects"
                   ? "bg-[#353535]"
                   : "bg-[#252525] hover:bg-[#303030]"
               }`}
               onClick={() => {
-                setProgressSource("projects");
+                setProgressResource("projects");
                 // If no projects are selected yet, add a placeholder to indicate projects are selected
                 if (selectedProjects.length === 0) {
                   setSelectedProjects(["placeholder"]);
@@ -511,7 +508,7 @@ export function NewGoalForm() {
               <div className="flex items-center flex-1">
                 <div
                   className={`w-4 h-4 rounded-full mr-3 border ${
-                    progressSource === "projects"
+                    progressResource === "projects"
                       ? "border-[#4573D2] bg-[#4573D2]"
                       : "border-gray-400"
                   }`}
@@ -523,7 +520,7 @@ export function NewGoalForm() {
                   </span>
                 </div>
               </div>
-              {progressSource === "projects" &&
+              {progressResource === "projects" &&
                 selectedProjects.length > 0 &&
                 selectedProjects[0] !== "placeholder" && (
                   <div className="text-sm text-gray-400">
@@ -536,12 +533,12 @@ export function NewGoalForm() {
             {/* Tasks option */}
             <div
               className={`flex items-center p-3 rounded-md cursor-pointer ${
-                progressSource === "tasks"
+                progressResource === "tasks"
                   ? "bg-[#353535]"
                   : "bg-[#252525] hover:bg-[#303030]"
               }`}
               onClick={() => {
-                setProgressSource("tasks");
+                setProgressResource("tasks");
                 // Clear project selection when selecting tasks
                 setSelectedProjects([]);
               }}
@@ -549,7 +546,7 @@ export function NewGoalForm() {
               <div className="flex items-center flex-1">
                 <div
                   className={`w-4 h-4 rounded-full mr-3 border ${
-                    progressSource === "tasks"
+                    progressResource === "tasks"
                       ? "border-[#4573D2] bg-[#4573D2]"
                       : "border-gray-400"
                   }`}
@@ -566,12 +563,12 @@ export function NewGoalForm() {
             {/* None option */}
             <div
               className={`flex items-center p-3 rounded-md cursor-pointer ${
-                progressSource === "none"
+                progressResource === "none"
                   ? "bg-[#353535]"
                   : "bg-[#252525] hover:bg-[#303030]"
               }`}
               onClick={() => {
-                setProgressSource("none");
+                setProgressResource("none");
                 // Clear project selection when selecting none
                 setSelectedProjects([]);
               }}
@@ -579,7 +576,7 @@ export function NewGoalForm() {
               <div className="flex items-center flex-1">
                 <div
                   className={`w-4 h-4 rounded-full mr-3 border ${
-                    progressSource === "none"
+                    progressResource === "none"
                       ? "border-[#4573D2] bg-[#4573D2]"
                       : "border-gray-400"
                   }`}

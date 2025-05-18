@@ -507,6 +507,21 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
                   Off track
                 </span>
               </Button>
+
+              <Button
+                variant="outline"
+                className={`justify-start status-btn ${
+                  projectStatus === "completed"
+                    ? "bg-[#1e2e2e] border-blue-600 text-white"
+                    : "border-[#353535] text-neutral-400 hover:text-white"
+                }`}
+                onClick={() => handleStatusChange("completed")}
+              >
+                <span className="flex items-center">
+                  <span className="h-2 w-2 rounded-full bg-blue-500 mr-2"></span>
+                  Completed
+                </span>
+              </Button>
             </div>
           </div>
 

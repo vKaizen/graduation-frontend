@@ -6,12 +6,13 @@ import { GoalsLayout } from "@/components/insights/GoalsLayout";
 import { StrategyMapView } from "@/components/insights/StrategyMapView";
 import { GoalFormModal } from "@/components/insights/GoalFormModal";
 import { fetchGoalHierarchy } from "@/api-service";
-import { Goal } from "@/types";
+import { Goal, Workspace } from "@/types";
 import { useToast } from "@/components/ui/use-toast";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, LayoutDashboard, RefreshCw, Plus } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getAuthCookie } from "@/lib/cookies";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 export default function StrategyMapPage() {
   const [rootGoal, setRootGoal] = useState<Goal | null>(null);
@@ -22,6 +23,7 @@ export default function StrategyMapPage() {
   const [selectedGoal, setSelectedGoal] = useState<Goal | undefined>(undefined);
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { currentWorkspace } = useWorkspace();
   const searchParams = useSearchParams();
   const highlightGoalId = searchParams.get("highlight");
   const { toast } = useToast();
@@ -60,8 +62,18 @@ export default function StrategyMapPage() {
         setTimeout(() => reject(new Error("Request timed out")), 15000)
       );
 
+      // Create options object for the API call
+      const options: { isPrivate: boolean; workspaceId?: string } = {
+        isPrivate: false, // Only show workspace goals in the strategy map
+      };
+
+      // Add workspaceId filter if we have a currentWorkspace
+      if (currentWorkspace?._id) {
+        options.workspaceId = currentWorkspace._id;
+      }
+
       // Only show non-private (workspace) goals in the strategy map
-      const dataPromise = fetchGoalHierarchy({ isPrivate: false });
+      const dataPromise = fetchGoalHierarchy(options);
 
       // Race between the actual fetch and the timeout
       const data = (await Promise.race([
@@ -70,17 +82,68 @@ export default function StrategyMapPage() {
       ])) as Goal[];
 
       console.log("Received goal hierarchy:", data);
+      console.log(
+        "Received goal data structure:",
+        Array.isArray(data) ? `Array with ${data.length} items` : typeof data
+      );
+
+      if (data.length > 0) {
+        console.log("First goal details:", {
+          id: data[0]._id,
+          title: data[0].title,
+          hasWorkspace: !!data[0].workspace,
+          workspaceName: data[0].workspace?.name,
+        });
+      }
 
       // Check if data is an array (even empty)
       if (Array.isArray(data)) {
         if (data.length > 0) {
-          setRootGoal(data[0]);
+          // Create a synthetic root node with all goals as direct children
+          // This represents the workspace at the top and all goals below it
+          const rootNode: Goal = {
+            _id: "workspace-root",
+            title: "Workspace Root",
+            description: "All workspace goals",
+            progress: 0,
+            status: "no-status",
+            isPrivate: false,
+            timeframe: "custom",
+            ownerId: "system",
+            // All goals will be direct children of the workspace
+            children: data,
+            workspace:
+              data[0].workspace ||
+              ({
+                name: currentWorkspace?.name || "My Workspace",
+                _id: currentWorkspace?._id || "workspace-id",
+                owner: "system", // Set a placeholder owner ID
+                members: [], // Empty members array
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              } as Workspace),
+          };
+
+          console.log(
+            "Setting root goal with all goals as direct children:",
+            rootNode.children?.length
+          );
+
+          setRootGoal(rootNode);
+
           if (data[0].workspace?.name) {
             setWorkspaceName(data[0].workspace.name);
+          } else if (currentWorkspace?.name) {
+            setWorkspaceName(currentWorkspace.name);
           }
         } else {
           // Empty array means no goals found
           setRootGoal(null);
+
+          // Set workspace name from context if available
+          if (currentWorkspace?.name) {
+            setWorkspaceName(currentWorkspace.name);
+          }
         }
       } else {
         // Invalid response format
@@ -106,11 +169,30 @@ export default function StrategyMapPage() {
   };
 
   const handleCreateGoal = () => {
-    setSelectedGoal(undefined);
+    console.log("Edit goal:");
+    // Set initial values for a new workspace goal
+    setSelectedGoal({
+      _id: "", // Will be filled by the backend
+      title: "",
+      description: "",
+      progress: 0,
+      ownerId: "", // Will be filled by the form
+      status: "no-status",
+      isPrivate: false, // Default to workspace goal for strategy map
+      timeframe: "Q2",
+      workspaceId: currentWorkspace?._id,
+    } as Goal);
     setIsModalOpen(true);
   };
 
   const handleEditGoal = (goal: Goal) => {
+    console.log("Edit goal:", goal);
+    // Ensure we're preserving the correct visibility setting
+    // Strategy map only shows workspace goals, so we need to make sure
+    // isPrivate is set to false when editing from the strategy map
+    if (goal && goal.isPrivate === undefined) {
+      goal.isPrivate = false; // Strategy map only shows workspace goals
+    }
     setSelectedGoal(goal);
     setIsModalOpen(true);
   };
@@ -138,7 +220,10 @@ export default function StrategyMapPage() {
     if (loading) {
       return (
         <div className="flex justify-center items-center h-64 text-gray-400">
-          Loading goals hierarchy...
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#4573D2] mb-4"></div>
+            <p>Loading strategy map...</p>
+          </div>
         </div>
       );
     }
@@ -157,9 +242,11 @@ export default function StrategyMapPage() {
                 onClick={fetchGoals}
                 className="mr-2"
               >
+                <RefreshCw className="h-4 w-4 mr-1" />
                 Try Again
               </Button>
               <Button variant="outline" size="sm" onClick={handleCreateGoal}>
+                <LayoutDashboard className="h-4 w-4 mr-1" />
                 Create New Goal
               </Button>
             </div>
@@ -168,34 +255,9 @@ export default function StrategyMapPage() {
       );
     }
 
-    if (!rootGoal) {
-      return (
-        <div className="text-center py-10">
-          <h3 className="text-lg font-medium text-gray-300 mb-4">
-            No goals found
-          </h3>
-          <p className="text-gray-400 mb-6">
-            Create your first goal to start building your strategy map
-          </p>
-          <div className="flex justify-center gap-4">
-            <Button onClick={handleCreateGoal}>Create Goal</Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                console.log("Manual refresh clicked");
-                fetchGoals();
-              }}
-            >
-              Refresh
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
     return (
       <>
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex justify-end items-center">
           <Button
             variant="outline"
             size="sm"
@@ -205,14 +267,40 @@ export default function StrategyMapPage() {
             }}
             className="mr-2"
           >
+            <RefreshCw className="h-4 w-4 mr-1" />
             Refresh Map
           </Button>
+          <Button size="sm" onClick={handleCreateGoal} className="bg-[#4573D2]">
+            <Plus className="h-4 w-4 mr-1" />
+            Create goal
+          </Button>
         </div>
-        <StrategyMapView
-          initialRootGoal={rootGoal}
-          highlightGoalId={highlightGoalId || undefined}
-          onEditGoal={handleEditGoal}
-        />
+        {rootGoal ? (
+          <StrategyMapView
+            initialRootGoal={rootGoal}
+            highlightGoalId={highlightGoalId || undefined}
+            onEditGoal={handleEditGoal}
+            onCreateGoal={handleCreateGoal}
+          />
+        ) : (
+          <div className="text-center py-10 rounded-lg border border-[#353535] bg-[#1a1a1a] p-6">
+            <h3 className="text-lg font-medium text-gray-300 mb-4">
+              No workspace goals found
+            </h3>
+            <p className="text-gray-400 mb-6">
+              Create your first workspace goal to start building your strategy
+              map.
+              <br />
+              <span className="text-sm mt-2 block">
+                Only workspace goals appear on the strategy map.
+              </span>
+            </p>
+            <Button onClick={handleCreateGoal} className="bg-[#4573D2]">
+              <Plus className="h-4 w-4 mr-1" />
+              Create Workspace Goal
+            </Button>
+          </div>
+        )}
       </>
     );
   };
@@ -222,7 +310,8 @@ export default function StrategyMapPage() {
       <GoalsLayout
         workspaceName={workspaceName}
         onCreateGoal={handleCreateGoal}
-        showTimePeriodFilter={true}
+        showTimePeriodFilter={false}
+        activeTab="strategy-map"
       >
         {renderContent()}
       </GoalsLayout>
@@ -232,6 +321,7 @@ export default function StrategyMapPage() {
         onClose={() => setIsModalOpen(false)}
         onSuccess={handleModalSuccess}
         goal={selectedGoal}
+        defaultIsPrivate={false} // Default to workspace goals for strategy map
       />
     </>
   );

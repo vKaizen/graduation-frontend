@@ -12,6 +12,7 @@ interface GoalsLayoutProps {
   filterText?: string;
   showTimePeriodFilter?: boolean;
   showCopyLink?: boolean;
+  activeTab?: string;
 }
 
 export const GoalsLayout = ({
@@ -22,11 +23,12 @@ export const GoalsLayout = ({
   filterText = "Filter",
   showTimePeriodFilter = true,
   showCopyLink = true,
+  activeTab,
 }: GoalsLayoutProps) => {
   return (
     <div className="p-6 text-white bg-[#121212] min-h-full">
       <div className="max-w-7xl mx-auto">
-        <WorkspaceHeader workspaceName={workspaceName} />
+        <WorkspaceHeader workspaceName={workspaceName} activeTab={activeTab} />
 
         <ActionBar
           onCreateGoal={onCreateGoal}

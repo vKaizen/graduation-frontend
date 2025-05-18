@@ -21,7 +21,7 @@ interface GoalPreviewProps {
   isPrivate?: boolean;
   selectedMembers?: string[];
   workspaceUsers?: User[];
-  progressSource?: "projects" | "tasks" | "none";
+  progressResource?: "projects" | "tasks" | "none";
 }
 
 export function GoalPreview({
@@ -34,7 +34,7 @@ export function GoalPreview({
   isPrivate = false,
   selectedMembers = [],
   workspaceUsers = [],
-  progressSource = "none",
+  progressResource = "none",
 }: GoalPreviewProps) {
   // Helper function to get user initials
   const getInitials = (name?: string) => {
@@ -100,8 +100,8 @@ export function GoalPreview({
             <Progress value={0} className="h-1.5 bg-[#353535]" />
           </div>
 
-          {/* Connected projects section - show only if progressSource is projects */}
-          {progressSource === "projects" && (
+          {/* Connected projects section - show only if progressResource is projects */}
+          {progressResource === "projects" && (
             <div>
               <div className="flex items-center mb-4 text-white">
                 <ChevronDown className="h-4 w-4 mr-2" />
@@ -145,8 +145,8 @@ export function GoalPreview({
             </div>
           )}
 
-          {/* Connected tasks section - show only if progressSource is tasks */}
-          {progressSource === "tasks" && (
+          {/* Connected tasks section - show only if progressResource is tasks */}
+          {progressResource === "tasks" && (
             <div>
               <div className="flex items-center mb-4 text-white">
                 <ChevronDown className="h-4 w-4 mr-2" />
@@ -186,19 +186,19 @@ export function GoalPreview({
           <div>
             <h4 className="text-gray-400 text-sm mb-2">Progress source</h4>
             <div className="flex items-center">
-              {progressSource === "projects" && (
+              {progressResource === "projects" && (
                 <>
                   <Clipboard className="h-4 w-4 mr-2 text-blue-400" />
                   <span className="text-white">Projects</span>
                 </>
               )}
-              {progressSource === "tasks" && (
+              {progressResource === "tasks" && (
                 <>
                   <ListChecks className="h-4 w-4 mr-2 text-green-400" />
                   <span className="text-white">Tasks</span>
                 </>
               )}
-              {progressSource === "none" && (
+              {progressResource === "none" && (
                 <>
                   <AlertCircle className="h-4 w-4 mr-2 text-gray-400" />
                   <span className="text-white">Manual updates</span>

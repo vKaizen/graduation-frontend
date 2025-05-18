@@ -2260,6 +2260,8 @@ export const deleteGoal = async (goalId: string): Promise<void> => {
 export const fetchGoalHierarchy = async (options?: {
   workspaceId?: string;
   isPrivate?: boolean;
+  includeProjects?: boolean;
+  includeTasks?: boolean;
 }): Promise<Goal[]> => {
   try {
     console.log("API SERVICE: Fetching goal hierarchy...");
@@ -2270,6 +2272,13 @@ export const fetchGoalHierarchy = async (options?: {
         queryParams.append("workspaceId", options.workspaceId);
       if (options.isPrivate !== undefined)
         queryParams.append("isPrivate", options.isPrivate.toString());
+      if (options.includeProjects !== undefined)
+        queryParams.append(
+          "includeProjects",
+          options.includeProjects.toString()
+        );
+      if (options.includeTasks !== undefined)
+        queryParams.append("includeTasks", options.includeTasks.toString());
     }
 
     const queryString = queryParams.toString();
@@ -2718,6 +2727,8 @@ export const fetchProjectStatistics = async (
 
 export const fetchGoalById = async (goalId: string): Promise<Goal> => {
   try {
+    console.log(`Fetching goal with ID: ${goalId}`);
+
     const response = await fetch(`${API_BASE_URL}/goals/${goalId}`, {
       headers: getAuthHeaders(),
     });
@@ -2727,6 +2738,12 @@ export const fetchGoalById = async (goalId: string): Promise<Goal> => {
     }
 
     const data = await response.json();
+
+    // Log the full response data to debug owner/members
+    console.log(`Goal ${goalId} data received:`, data);
+    console.log(`Goal owner:`, data.owner || data.ownerId);
+    console.log(`Goal members (${data.members?.length || 0}):`, data.members);
+
     return data;
   } catch (error) {
     console.error("Error fetching goal:", error);

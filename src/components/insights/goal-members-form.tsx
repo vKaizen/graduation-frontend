@@ -29,7 +29,7 @@ interface GoalMembersFormProps {
   goalTitle: string;
   selectedTimeframe: GoalTimeframe;
   selectedTimeframeYear: number;
-  progressSource?: "projects" | "tasks" | "none";
+  progressResource?: "projects" | "tasks" | "none";
 }
 
 export function GoalMembersForm({
@@ -46,7 +46,7 @@ export function GoalMembersForm({
   goalTitle,
   selectedTimeframe,
   selectedTimeframeYear,
-  progressSource = "none",
+  progressResource = "none",
 }: GoalMembersFormProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -61,7 +61,7 @@ export function GoalMembersForm({
     workspaceUsersCount: workspaceUsers?.length || 0,
     selectedMembers,
     isPrivate,
-    progressSource,
+    progressResource,
   });
 
   // Filter users based on search term and exclude current user
@@ -125,7 +125,7 @@ export function GoalMembersForm({
       isPrivate={isPrivate}
       selectedMembers={selectedMembers}
       workspaceUsers={workspaceUsers}
-      progressSource={progressSource}
+      progressResource={progressResource}
     >
       {/* Owner section */}
       <div className="space-y-2">

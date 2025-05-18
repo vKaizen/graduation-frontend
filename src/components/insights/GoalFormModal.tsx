@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { createGoal, updateGoal, fetchUsers, fetchGoals } from "@/api-service";
-import { Goal, CreateGoalDto, UpdateGoalDto, User } from "@/types";
+import { Goal, CreateGoalDto, User } from "@/types";
 import { useToast } from "@/components/ui/use-toast";
 
 interface GoalFormModalProps {
@@ -29,6 +29,7 @@ interface GoalFormModalProps {
   onClose: () => void;
   onSuccess: () => void;
   goal?: Goal; // If provided, we're editing; otherwise, we're creating
+  defaultIsPrivate?: boolean; // Default value for isPrivate when creating new goals
 }
 
 export const GoalFormModal = ({
@@ -36,6 +37,7 @@ export const GoalFormModal = ({
   onClose,
   onSuccess,
   goal,
+  defaultIsPrivate = true, // Default to private for backward compatibility
 }: GoalFormModalProps) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -45,6 +47,7 @@ export const GoalFormModal = ({
   );
   const [ownerId, setOwnerId] = useState<string>("");
   const [workspaceId, setWorkspaceId] = useState<string | undefined>(undefined);
+  const [isPrivate, setIsPrivate] = useState(true); // Add state for isPrivate
 
   const [users, setUsers] = useState<User[]>([]);
   const [parentGoals, setParentGoals] = useState<Goal[]>([]);
@@ -108,6 +111,7 @@ export const GoalFormModal = ({
       setParentGoalId(goal.parentGoalId);
       setOwnerId(goal.ownerId || "");
       setWorkspaceId(goal.workspaceId);
+      setIsPrivate(goal.isPrivate !== undefined ? goal.isPrivate : true);
     } else {
       // Default values for new goal
       setTitle("");
@@ -116,8 +120,9 @@ export const GoalFormModal = ({
       setParentGoalId(undefined);
       setOwnerId(""); // Should be set to current user ID
       setWorkspaceId(undefined);
+      setIsPrivate(defaultIsPrivate); // Use the provided default or true
     }
-  }, [goal, isOpen]);
+  }, [goal, isOpen, defaultIsPrivate]);
 
   const handleSubmit = async () => {
     try {
@@ -149,6 +154,7 @@ export const GoalFormModal = ({
           ownerId,
           parentGoalId,
           workspaceId,
+          isPrivate, // Include isPrivate in updates
         };
 
         await updateGoal(goal._id, updateData);
@@ -164,6 +170,7 @@ export const GoalFormModal = ({
           ownerId,
           parentGoalId,
           workspaceId,
+          isPrivate, // Include isPrivate when creating
         };
 
         await createGoal(createData);
@@ -230,6 +237,27 @@ export const GoalFormModal = ({
               onValueChange={(values: number[]) => setProgress(values[0])}
               className="py-4"
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="visibility">Visibility</Label>
+            <Select
+              value={isPrivate ? "private" : "workspace"}
+              onValueChange={(value) => setIsPrivate(value === "private")}
+            >
+              <SelectTrigger className="bg-[#252525] border-[#353535]">
+                <SelectValue placeholder="Select visibility" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#1a1a1a] border-[#353535] text-white">
+                <SelectItem value="private">Private Goal</SelectItem>
+                <SelectItem value="workspace">Workspace Goal</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-gray-400">
+              {isPrivate
+                ? "Private goals are only visible to you and selected members"
+                : "Workspace goals are visible to all workspace members and will appear on the strategy map"}
+            </div>
           </div>
 
           <div className="grid gap-2">

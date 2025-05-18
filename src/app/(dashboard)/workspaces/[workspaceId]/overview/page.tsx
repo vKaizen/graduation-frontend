@@ -3,11 +3,15 @@
 import { useState, useEffect } from "react";
 import { fetchWorkspaceById } from "@/api-service";
 import { useRouter, useParams } from "next/navigation";
-import { Workspace, User, Project } from "@/types";
+import { Workspace, User, Project, Goal } from "@/types";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Plus, List } from "lucide-react";
 import Link from "next/link";
-import { fetchWorkspaceMembers, fetchProjectsByWorkspace } from "@/api-service";
+import {
+  fetchWorkspaceMembers,
+  fetchProjectsByWorkspace,
+  fetchGoals,
+} from "@/api-service";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MemberInviteModal } from "@/components/workspace/MemberInviteModal";
 
@@ -115,30 +119,83 @@ export default function WorkspaceOverviewPage() {
 function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
   const [members, setMembers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [isLoadingGoals, setIsLoadingGoals] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoadingMembers(true);
         setIsLoadingProjects(true);
-        // Fetch members and projects in parallel
-        const [membersData, projectsData] = await Promise.all([
+        setIsLoadingGoals(true);
+
+        // Fetch members, projects, and goals in parallel
+        const [membersData, projectsData, goalsData] = await Promise.all([
           fetchWorkspaceMembers(workspace._id),
           fetchProjectsByWorkspace(workspace._id),
+          fetchGoals({ workspaceId: workspace._id, isPrivate: false }),
         ]);
+
         setMembers(membersData);
         setProjects(projectsData);
+        setGoals(goalsData);
       } catch (error) {
         console.error("Failed to load workspace data:", error);
       } finally {
         setIsLoadingMembers(false);
         setIsLoadingProjects(false);
+        setIsLoadingGoals(false);
       }
     };
     loadData();
   }, [workspace._id]);
+
+  const handleCreateGoal = () => {
+    router.push("/goals/new");
+  };
+
+  // Helper function to get status color based on goal status
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case "on-track":
+        return {
+          bg: "bg-[#1e2e1e]",
+          text: "text-green-400",
+          dot: "bg-green-500",
+        };
+      case "at-risk":
+        return {
+          bg: "bg-[#2e2a1e]",
+          text: "text-yellow-400",
+          dot: "bg-yellow-500",
+        };
+      case "off-track":
+        return { bg: "bg-[#2e1e1e]", text: "text-red-400", dot: "bg-red-500" };
+      case "achieved":
+        return {
+          bg: "bg-[#1e2e2e]",
+          text: "text-blue-400",
+          dot: "bg-blue-500",
+        };
+      default:
+        return {
+          bg: "bg-[#252525]",
+          text: "text-gray-400",
+          dot: "bg-gray-500",
+        };
+    }
+  };
+
+  // Function to determine progress color
+  const getProgressColor = (progress: number) => {
+    if (progress >= 75) return "bg-green-500";
+    if (progress >= 50) return "bg-[#4573D2]";
+    if (progress >= 25) return "bg-yellow-500";
+    return "bg-[#4573D2]";
+  };
 
   return (
     <div className="px-6 py-8 bg-[#111111] min-h-full flex flex-col">
@@ -275,20 +332,97 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
                 variant="outline"
                 size="sm"
                 className="text-white border-[#353535] bg-[#252525] hover:bg-[#353535] hover:text-white"
+                onClick={handleCreateGoal}
               >
                 Create goal
               </Button>
             </div>
 
-            <div className="bg-[#252525] rounded-lg p-6 border border-[#353535]">
-              <h3 className="text-white font-medium mb-2">
-                This team hasn&apos;t created any goals yet
-              </h3>
-              <p className="text-[#a1a1a1] text-sm mb-4">
-                Add a goal so the team can see what you hope to achieve.
-              </p>
-              <div className="h-4 w-full bg-[#353535] rounded-full"></div>
-            </div>
+            {isLoadingGoals ? (
+              <div className="bg-[#252525] rounded-lg p-6 border border-[#353535] flex items-center justify-center">
+                <div className="animate-pulse text-[#a1a1a1]">
+                  Loading goals...
+                </div>
+              </div>
+            ) : goals.length === 0 ? (
+              <div className="bg-[#252525] rounded-lg p-6 border border-[#353535]">
+                <h3 className="text-white font-medium mb-2">
+                  This team hasn&apos;t created any goals yet
+                </h3>
+                <p className="text-[#a1a1a1] text-sm mb-4">
+                  Add a goal so the team can see what you hope to achieve.
+                </p>
+                <div className="h-4 w-full bg-[#353535] rounded-full"></div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {goals.slice(0, 3).map((goal) => {
+                  const statusStyle = getStatusStyle(goal.status);
+                  const progressColor = getProgressColor(goal.progress);
+
+                  return (
+                    <div
+                      key={goal._id}
+                      className="bg-[#252525] rounded-lg p-4 border border-[#353535] cursor-pointer hover:bg-[#303030] transition-colors"
+                      onClick={() => router.push(`/insights/goals/${goal._id}`)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-white font-medium truncate pr-2">
+                          {goal.title}
+                        </h3>
+                        <div
+                          className={`text-xs rounded-full px-2 py-0.5 flex items-center ${statusStyle.bg} ${statusStyle.text}`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${statusStyle.dot} mr-1`}
+                          ></span>
+                          {goal.status === "no-status"
+                            ? "No status"
+                            : goal.status.replace(/-/g, " ")}
+                        </div>
+                      </div>
+
+                      <div className="relative pt-1 mb-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="text-xs text-[#a1a1a1]">
+                            {goal.progress}% Complete
+                          </div>
+                        </div>
+                        <div className="flex h-2 bg-[#353535] rounded-full overflow-hidden">
+                          <div
+                            className={`${progressColor} rounded-full transition-all duration-300`}
+                            style={{ width: `${goal.progress}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center text-xs text-[#a1a1a1]">
+                        <span>
+                          {goal.timeframe} {goal.timeframeYear}
+                        </span>
+                        {goal.progress === 100 && (
+                          <span className="text-green-400 font-medium">
+                            Completed
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {goals.length > 3 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-[#4573D2] hover:text-[#5584E3] hover:bg-[#252525]"
+                    onClick={() =>
+                      router.push("/insights/goals/workspace-goals")
+                    }
+                  >
+                    View all goals
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -30,7 +30,9 @@ export interface Project {
   name: string;
   description?: string;
   color: string;
-  status?: "on-track" | "at-risk" | "off-track";
+  status?: "on-track" | "at-risk" | "off-track" | "completed";
+  completed?: boolean;
+  completedAt?: string | Date;
   workspaceId: string;
   workspace?: {
     _id: string;
@@ -101,7 +103,7 @@ export interface AddMemberDto {
 }
 
 export interface UpdateProjectStatusDto {
-  status: "on-track" | "at-risk" | "off-track";
+  status: "on-track" | "at-risk" | "off-track" | "completed";
 }
 
 export interface WorkspaceMember {
@@ -169,7 +171,7 @@ export interface Goal {
   projects?: string[];
   workspaceId?: string;
   members?: string[];
-  progressSource?: "projects" | "tasks" | "none";
+  progressResource?: "projects" | "tasks" | "none";
   children?: Goal[];
   owner?: User;
   workspace?: Workspace;
@@ -193,7 +195,7 @@ export interface CreateGoalDto {
   projects?: string[];
   workspaceId?: string;
   members?: string[];
-  progressSource?: "projects" | "tasks" | "none";
+  progressResource?: "projects" | "tasks" | "none";
 }
 
 export interface UpdateGoalDto {
@@ -211,5 +213,5 @@ export interface UpdateGoalDto {
   dueDate?: string;
   projects?: string[];
   workspaceId?: string;
-  progressSource?: "projects" | "tasks" | "none";
+  progressResource?: "projects" | "tasks" | "none";
 }

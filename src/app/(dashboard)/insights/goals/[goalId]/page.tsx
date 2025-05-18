@@ -7,6 +7,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   ChevronLeft,
   MessageSquare,
@@ -17,6 +25,8 @@ import {
   AlertCircle,
   PlusCircle,
   Send,
+  Search,
+  X,
 } from "lucide-react";
 import { Goal, User, Project, Task } from "@/types";
 import {
@@ -25,6 +35,10 @@ import {
   fetchProjects,
   fetchTasksByWorkspace,
   fetchWorkspaces,
+  linkTaskToGoal,
+  updateGoal,
+  calculateGoalProgress,
+  updateProjectStatus,
 } from "@/api-service";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -36,6 +50,10 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { getAuthCookie } from "@/lib/cookies";
 
 export default function GoalDetailsPage() {
   const router = useRouter();
@@ -53,19 +71,111 @@ export default function GoalDetailsPage() {
   const [comments, setComments] = useState<
     { id: string; user: User; content: string; timestamp: Date }[]
   >([]);
-  const [progressHistory] = useState([
-    { date: "Jan", progress: 0 },
-    { date: "Feb", progress: 15 },
-    { date: "Mar", progress: 30 },
-    { date: "Apr", progress: 45 },
-    { date: "May", progress: 60 },
-    { date: "Jun", progress: 75 },
-  ]);
+  const [progressHistory, setProgressHistory] = useState<
+    { date: string; progress: number }[]
+  >(() => {
+    // Initialize with empty data structure for the last 6 months
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth(); // 0-11
+
+    const lastSixMonths = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthIndex = (currentMonth - i + 12) % 12;
+      lastSixMonths.push(months[monthIndex]);
+    }
+
+    return lastSixMonths.map((month) => ({
+      date: month,
+      progress: 0,
+    }));
+  });
+
+  // States for modals
+  const [showTasksModal, setShowTasksModal] = useState(false);
+  const [showProjectsModal, setShowProjectsModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [savingChanges, setSavingChanges] = useState(false);
+  const [updatingProgress, setUpdatingProgress] = useState(false);
 
   // Helper function to check if a value is a valid MongoDB ID
   const isValidMongoId = (id: any): boolean => {
     return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id.trim());
   };
+
+  // Helper function to extract the ID from a user object or string
+  const getUserId = (user: any): string | null => {
+    if (!user) return null;
+    if (typeof user === "string") return user;
+    if (typeof user === "object") return user._id || user.id || null;
+    return null;
+  };
+
+  // Function to update the progress history chart
+  const updateProgressHistory = useCallback((currentGoal: Goal | null) => {
+    if (!currentGoal) return;
+
+    // Get current month and generate last 6 months
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth(); // 0-11
+
+    // Create an array of the last 6 months
+    const lastSixMonths = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthIndex = (currentMonth - i + 12) % 12; // Ensure we wrap around correctly
+      lastSixMonths.push(months[monthIndex]);
+    }
+
+    // Create a simple progression based on current progress
+    // This is a simple interpolation - in a real app you'd fetch actual historical data
+    const currentProgress = currentGoal.progress || 0;
+    const progressPoints = lastSixMonths.map((month, index) => {
+      // Simple progression: earlier months have lower progress
+      const factor = index / 5; // 0 to 1
+      const monthProgress = Math.round(currentProgress * factor);
+
+      return {
+        date: month,
+        progress: monthProgress,
+      };
+    });
+
+    // Add current month with current progress
+    progressPoints[5] = {
+      date: lastSixMonths[5],
+      progress: currentProgress,
+    };
+
+    setProgressHistory(progressPoints);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -73,6 +183,11 @@ export default function GoalDetailsPage() {
       // First fetch the goal to get its workspace ID
       const goalData = await fetchGoalById(goalId);
       setGoal(goalData);
+
+      // Add debug logs to understand the structure of the goal data
+      console.log("Full goal data from API:", goalData);
+      console.log("Owner details:", goalData.owner || goalData.ownerId);
+      console.log("Members array:", goalData.members);
 
       // Get the workspace ID from the goal
       let workspaceId = goalData.workspaceId;
@@ -181,7 +296,9 @@ export default function GoalDetailsPage() {
           {
             id: "1",
             user:
-              usersData.find((u) => u._id === goalData.ownerId) || usersData[0],
+              usersData.find(
+                (u) => u._id === getUserId(goalData.ownerId || goalData.owner)
+              ) || usersData[0],
             content: "Let's make sure we stay on track with this goal.",
             timestamp: new Date(Date.now() - 86400000), // 1 day ago
           },
@@ -193,17 +310,156 @@ export default function GoalDetailsPage() {
           },
         ]);
       }
+
+      // Immediately recalculate progress to ensure it's up to date
+      try {
+        await calculateGoalProgress(goalId);
+        // Fetch the goal again to get the updated progress
+        const updatedGoal = await fetchGoalById(goalId);
+        setGoal(updatedGoal);
+        updateProgressHistory(updatedGoal);
+      } catch (progressError) {
+        console.error("Error calculating goal progress:", progressError);
+      }
     } catch (err) {
       console.error("Error loading goal data:", err);
       setError("Failed to load goal details. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [goalId]);
+  }, [goalId, updateProgressHistory]);
+
+  // Function to manually recalculate goal progress
+  const handleRecalculateProgress = useCallback(async () => {
+    if (!goal) return;
+
+    setUpdatingProgress(true);
+    try {
+      // Call the API to recalculate progress
+      const updatedProgress = await calculateGoalProgress(goalId);
+
+      // Immediately get the updated goal data
+      const updatedGoal = await fetchGoalById(goalId);
+
+      // Update the local goal state with the fresh data
+      setGoal(updatedGoal);
+      updateProgressHistory(updatedGoal);
+
+      toast.success("Goal progress updated successfully");
+    } catch (error) {
+      console.error("Error updating goal progress:", error);
+      toast.error("Failed to update goal progress");
+    } finally {
+      setUpdatingProgress(false);
+    }
+  }, [goalId, goal, updateProgressHistory]);
 
   useEffect(() => {
     loadData();
+
+    // Don't set up the interval on initial load
+    // This prevents an infinite loop of refreshing
   }, [loadData]);
+
+  // Set up a separate interval effect that only runs when we have a goal loaded
+  useEffect(() => {
+    if (!goal || loading) return; // Skip if still loading or no goal
+
+    console.log("Setting up goal progress refresh interval");
+    // Refresh progress every 30 seconds instead of 10 for better performance
+    const intervalId = setInterval(() => {
+      console.log("Auto-refreshing goal progress");
+      handleRecalculateProgress();
+    }, 30000);
+
+    // Clean up interval on component unmount or when dependencies change
+    return () => {
+      console.log("Clearing goal progress refresh interval");
+      clearInterval(intervalId);
+    };
+  }, [goal, loading, handleRecalculateProgress]);
+
+  // Function to check for project/task completion to update progress
+  useEffect(() => {
+    if (goal && goal.progressResource) {
+      // For projects-based progress, check if any projects are completed but progress isn't updated
+      if (
+        goal.progressResource === "projects" &&
+        goal.projects &&
+        goal.projects.length > 0
+      ) {
+        const projectEntities = Array.isArray(goal.projects)
+          ? goal.projects
+          : [];
+        const completedCount = projectEntities.filter((p) => {
+          const project =
+            typeof p === "string"
+              ? projects.find((proj) => proj._id === p)
+              : projects.find((proj) => proj._id === p._id);
+          return project && project.completed;
+        }).length;
+
+        const expectedProgress =
+          projectEntities.length > 0
+            ? Math.round((completedCount / projectEntities.length) * 100)
+            : 0;
+
+        // If progress is outdated, suggest recalculation
+        if (Math.abs(expectedProgress - goal.progress) > 5) {
+          console.log("Progress mismatch detected:", {
+            currentProgress: goal.progress,
+            expectedProgress,
+            completedCount,
+            totalProjects: projectEntities.length,
+          });
+          toast.info(
+            "Project status changed. Click 'Update Progress' to recalculate.",
+            { duration: 5000 }
+          );
+        }
+      }
+
+      // For tasks-based progress, similar check
+      if (
+        goal.progressResource === "tasks" &&
+        goal.linkedTasks &&
+        goal.linkedTasks.length > 0
+      ) {
+        const taskIds = goal.linkedTasks.map((t) =>
+          typeof t === "string" ? t : t._id
+        );
+        const linkedTasks = tasks.filter((t) => taskIds.includes(t._id));
+
+        if (linkedTasks.length > 0) {
+          const completedCount = linkedTasks.filter((t) => t.completed).length;
+          const expectedProgress = Math.round(
+            (completedCount / linkedTasks.length) * 100
+          );
+
+          // If progress is outdated, suggest recalculation
+          if (Math.abs(expectedProgress - goal.progress) > 5) {
+            console.log("Task progress mismatch detected:", {
+              currentProgress: goal.progress,
+              expectedProgress,
+              completedCount,
+              totalTasks: linkedTasks.length,
+            });
+            toast.info(
+              "Task status changed. Click 'Update Progress' to recalculate.",
+              { duration: 5000 }
+            );
+          }
+        }
+      }
+    }
+  }, [goal, projects, tasks]);
+
+  // Update progress history when goal changes
+  useEffect(() => {
+    if (goal) {
+      updateProgressHistory(goal);
+    }
+  }, [goal, updateProgressHistory]);
 
   const getInitials = (name?: string) => {
     if (!name) return "U";
@@ -242,10 +498,126 @@ export default function GoalDetailsPage() {
     }).format(date);
   };
 
+  const handleConnectTask = () => {
+    setSelectedItems([]);
+    setSearchQuery("");
+    setShowTasksModal(true);
+  };
+
+  const handleConnectProject = () => {
+    setSelectedItems([]);
+    setSearchQuery("");
+    setShowProjectsModal(true);
+  };
+
+  const handleSaveSelectedTasks = async () => {
+    if (selectedItems.length === 0 || !goal) return;
+
+    setSavingChanges(true);
+    try {
+      // Link each selected task to the goal
+      for (const taskId of selectedItems) {
+        await linkTaskToGoal(goalId, taskId);
+      }
+
+      // Set progress resource to tasks if not already set
+      if (goal.progressResource !== "tasks") {
+        await updateGoal(goalId, { progressResource: "tasks" });
+      }
+
+      // Reload goal data
+      await loadData();
+      toast.success(`${selectedItems.length} tasks linked to goal`);
+      setShowTasksModal(false);
+    } catch (error) {
+      console.error("Error linking tasks to goal:", error);
+      toast.error("Failed to link tasks to goal");
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+
+  const handleSaveSelectedProjects = async () => {
+    if (selectedItems.length === 0 || !goal) return;
+
+    setSavingChanges(true);
+    try {
+      // Update goal with the selected projects
+      await updateGoal(goalId, {
+        projects: selectedItems,
+        progressResource: "projects",
+      });
+
+      // Reload goal data
+      await loadData();
+      toast.success(`${selectedItems.length} projects linked to goal`);
+      setShowProjectsModal(false);
+    } catch (error) {
+      console.error("Error linking projects to goal:", error);
+      toast.error("Failed to link projects to goal");
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItems((prev) =>
+      prev.includes(itemId)
+        ? prev.filter((id) => id !== itemId)
+        : [...prev, itemId]
+    );
+  };
+
+  const filteredTasks = tasks.filter(
+    (task) =>
+      (task.title?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      (task.description?.toLowerCase() || "").includes(
+        searchQuery.toLowerCase()
+      )
+  );
+
+  const filteredProjects = projects.filter(
+    (project) =>
+      (project.name?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      (project.description?.toLowerCase() || "").includes(
+        searchQuery.toLowerCase()
+      )
+  );
+
+  // Function to calculate progress color
+  const getProgressColor = (progress: number) => {
+    if (progress >= 75) return "bg-green-500";
+    if (progress >= 50) return "bg-[#4573D2]";
+    if (progress >= 25) return "bg-yellow-500";
+    return "bg-[#4573D2]";
+  };
+
+  // Add a timeout to prevent infinite loading state
+  useEffect(() => {
+    if (loading) {
+      const timeoutId = setTimeout(() => {
+        if (loading) {
+          console.error("Goal loading timed out after 10 seconds");
+          setLoading(false);
+          setError("Loading timed out. Please try refreshing the page.");
+        }
+      }, 10000); // 10 second timeout
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [loading]);
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#1E1E1E]">
-        <div className="text-white">Loading goal details...</div>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#1E1E1E]">
+        <div className="text-white mb-4">Loading goal details...</div>
+        <Button
+          variant="outline"
+          onClick={() => router.push("/insights/goals/my-goals")}
+          className="mt-4 bg-transparent border-[#353535] text-white hover:bg-[#252525]"
+        >
+          Back to Goals
+        </Button>
       </div>
     );
   }
@@ -279,9 +651,63 @@ export default function GoalDetailsPage() {
     );
   }
 
-  const owner = users.find((u) => u._id === goal.ownerId);
-  const goalMembers = users.filter((u) => goal.members?.includes(u._id));
-  const linkedProjects = projects.filter((p) => goal.projects?.includes(p._id));
+  // Extract owner information
+  let owner = null;
+
+  // First, check if the goal already has the owner populated
+  if (
+    goal.owner &&
+    typeof goal.owner === "object" &&
+    (goal.owner._id || goal.owner.id)
+  ) {
+    // Owner is directly available in the goal object
+    owner = goal.owner;
+    console.log("Using populated owner from goal:", owner);
+  } else {
+    // Find owner in the users array using ownerId
+    const ownerId = getUserId(goal.ownerId || goal.owner);
+    if (ownerId) {
+      owner = users.find((u) => u._id === ownerId);
+      console.log(
+        `Looking for owner with ID ${ownerId} in users array:`,
+        owner
+      );
+    }
+  }
+
+  // Extract members information
+  let goalMembers = [];
+
+  // Process the members array, handling both ID strings and objects
+  if (goal.members && Array.isArray(goal.members)) {
+    if (goal.members.length > 0) {
+      console.log("Processing members array:", goal.members);
+
+      // Get the owner ID to exclude from members list
+      const ownerId = getUserId(goal.ownerId || goal.owner);
+      console.log("Owner ID to exclude from members:", ownerId);
+
+      // Convert all member entries to IDs
+      const memberIds = goal.members
+        .map((member) => getUserId(member))
+        .filter(Boolean)
+        // Filter out the owner ID from the members list
+        .filter((id) => id !== ownerId);
+
+      console.log("Extracted member IDs (excluding owner):", memberIds);
+
+      // Find matching users
+      goalMembers = users.filter((user) => memberIds.includes(user._id));
+      console.log(
+        "Found member users (excluding owner):",
+        goalMembers.map((m) => m._id)
+      );
+    }
+  }
+
+  const linkedProjects = projects.filter((p) =>
+    goal.projects?.some((proj) => getUserId(proj) === p._id)
+  );
 
   return (
     <div className="min-h-screen bg-[#1E1E1E] text-white">
@@ -330,8 +756,12 @@ export default function GoalDetailsPage() {
               >
                 Edit
               </Button>
-              <Button className="bg-[#4573D2] hover:bg-[#3A62B3]">
-                Update Progress
+              <Button
+                className="bg-[#4573D2] hover:bg-[#3A62B3]"
+                onClick={handleRecalculateProgress}
+                disabled={updatingProgress}
+              >
+                {updatingProgress ? "Updating..." : "Refresh Progress"}
               </Button>
             </div>
           </div>
@@ -348,14 +778,29 @@ export default function GoalDetailsPage() {
               <h2 className="text-xl font-semibold">Progress</h2>
               <div className="text-3xl font-bold">{goal.progress}%</div>
             </div>
-            <Progress value={goal.progress} className="h-2 mb-6" />
+            <Progress
+              value={goal.progress}
+              className={`h-2 mb-6 ${
+                goal.progress >= 75
+                  ? "bg-green-900 [&>div]:bg-green-500"
+                  : goal.progress >= 50
+                  ? "bg-blue-900 [&>div]:bg-[#4573D2]"
+                  : goal.progress >= 25
+                  ? "bg-yellow-900 [&>div]:bg-yellow-500"
+                  : "bg-gray-900 [&>div]:bg-[#4573D2]"
+              }`}
+            />
 
             <div className="h-64 mb-6">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={progressHistory}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#353535" />
                   <XAxis dataKey="date" stroke="#6b7280" />
-                  <YAxis stroke="#6b7280" domain={[0, 100]} />
+                  <YAxis
+                    stroke="#6b7280"
+                    domain={[0, 100]}
+                    tickFormatter={(value) => `${value}%`}
+                  />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "#1a1a1a",
@@ -363,6 +808,8 @@ export default function GoalDetailsPage() {
                       borderRadius: "4px",
                       color: "white",
                     }}
+                    formatter={(value) => [`${value}%`, "Progress"]}
+                    labelFormatter={(label) => `Month: ${label}`}
                   />
                   <Line
                     type="monotone"
@@ -370,6 +817,9 @@ export default function GoalDetailsPage() {
                     stroke="#4573D2"
                     strokeWidth={2}
                     dot={{ r: 4, fill: "#4573D2" }}
+                    isAnimationActive={true}
+                    animationDuration={1000}
+                    name="Progress"
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -378,7 +828,7 @@ export default function GoalDetailsPage() {
             {/* Progress source section */}
             <div className="border-t border-[#353535] pt-4">
               <div className="flex items-center mb-4">
-                {goal.progressSource === "projects" && (
+                {goal && goal.progressResource === "projects" && (
                   <>
                     <Clipboard className="h-5 w-5 mr-2 text-blue-400" />
                     <h3 className="text-lg font-medium">
@@ -386,24 +836,26 @@ export default function GoalDetailsPage() {
                     </h3>
                   </>
                 )}
-                {goal.progressSource === "tasks" && (
+                {goal && goal.progressResource === "tasks" && (
                   <>
                     <ListChecks className="h-5 w-5 mr-2 text-green-400" />
                     <h3 className="text-lg font-medium">Progress from Tasks</h3>
                   </>
                 )}
-                {(!goal.progressSource || goal.progressSource === "none") && (
-                  <>
-                    <AlertCircle className="h-5 w-5 mr-2 text-gray-400" />
-                    <h3 className="text-lg font-medium">
-                      Manual Progress Updates
-                    </h3>
-                  </>
-                )}
+                {goal &&
+                  (!goal.progressResource ||
+                    goal.progressResource === "none") && (
+                    <>
+                      <AlertCircle className="h-5 w-5 mr-2 text-gray-400" />
+                      <h3 className="text-lg font-medium">
+                        Manual Progress Updates
+                      </h3>
+                    </>
+                  )}
               </div>
 
               {/* Connected projects/tasks based on progress source */}
-              {goal.progressSource === "projects" && (
+              {goal && goal.progressResource === "projects" && (
                 <div className="space-y-3">
                   {linkedProjects.length > 0 ? (
                     linkedProjects.map((project) => (
@@ -418,7 +870,27 @@ export default function GoalDetailsPage() {
                           ></div>
                           <span>{project.name}</span>
                         </div>
-                        <Progress value={60} className="w-24 h-1.5" />
+                        <div className="flex items-center gap-3">
+                          <div className="flex flex-col items-end">
+                            <Progress
+                              value={
+                                project.completed ? 100 : project.progress || 0
+                              }
+                              className={`w-24 h-1.5 ${
+                                project.completed ||
+                                project.status === "completed"
+                                  ? "bg-green-900 [&>div]:bg-green-500"
+                                  : ""
+                              }`}
+                            />
+                            <span className="text-xs text-gray-400 mt-1">
+                              {project.completed ||
+                              project.status === "completed"
+                                ? "Completed"
+                                : project.status || "In progress"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -430,6 +902,7 @@ export default function GoalDetailsPage() {
                     variant="outline"
                     size="sm"
                     className="bg-transparent border-[#353535] text-white hover:bg-[#252525] w-full flex items-center justify-center"
+                    onClick={handleConnectProject}
                   >
                     <PlusCircle className="h-4 w-4 mr-2" />
                     Connect Project
@@ -437,23 +910,35 @@ export default function GoalDetailsPage() {
                 </div>
               )}
 
-              {goal.progressSource === "tasks" && (
+              {goal && goal.progressResource === "tasks" && (
                 <div className="space-y-3">
                   {tasks && tasks.length > 0 ? (
-                    tasks.map((task) => (
-                      <div
-                        key={task._id}
-                        className="flex items-center justify-between p-3 bg-[#1E1E1E] rounded-md"
-                      >
-                        <div className="flex items-center">
-                          <span>{task.title}</span>
+                    // Filter tasks to only show ones linked to this goal
+                    tasks
+                      .filter(
+                        (task) =>
+                          goal.linkedTasks &&
+                          Array.isArray(goal.linkedTasks) &&
+                          goal.linkedTasks.some((lt) =>
+                            typeof lt === "string"
+                              ? lt === task._id
+                              : lt._id === task._id
+                          )
+                      )
+                      .map((task) => (
+                        <div
+                          key={task._id}
+                          className="flex items-center justify-between p-3 bg-[#1E1E1E] rounded-md"
+                        >
+                          <div className="flex items-center">
+                            <span>{task.title}</span>
+                          </div>
+                          <Progress
+                            value={task.completed ? 100 : 0}
+                            className="w-24 h-1.5"
+                          />
                         </div>
-                        <Progress
-                          value={task.completed ? 100 : 0}
-                          className="w-24 h-1.5"
-                        />
-                      </div>
-                    ))
+                      ))
                   ) : (
                     <div className="text-gray-400 text-sm mb-3">
                       {Array.isArray(tasks)
@@ -465,12 +950,10 @@ export default function GoalDetailsPage() {
                     variant="outline"
                     size="sm"
                     className="bg-transparent border-[#353535] text-white hover:bg-[#252525] w-full flex items-center justify-center"
-                    onClick={loadData}
+                    onClick={handleConnectTask}
                   >
                     <PlusCircle className="h-4 w-4 mr-2" />
-                    {Array.isArray(tasks)
-                      ? "Connect Tasks"
-                      : "Retry Loading Tasks"}
+                    Connect Tasks
                   </Button>
                 </div>
               )}
@@ -552,14 +1035,18 @@ export default function GoalDetailsPage() {
             {/* Owner */}
             <div className="mb-6">
               <h3 className="text-sm text-gray-400 mb-2">Owner</h3>
-              <div className="flex items-center">
-                <Avatar className="h-8 w-8 mr-3 bg-[#f87171]">
-                  <AvatarFallback>
-                    {getInitials(owner?.fullName)}
-                  </AvatarFallback>
-                </Avatar>
-                <span>{owner?.fullName || owner?.email || "Unknown"}</span>
-              </div>
+              {owner ? (
+                <div className="flex items-center">
+                  <Avatar className="h-8 w-8 mr-3 bg-[#f87171]">
+                    <AvatarFallback>
+                      {getInitials(owner?.fullName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span>{owner?.fullName || owner?.email || "Unknown"}</span>
+                </div>
+              ) : (
+                <div className="text-gray-400 text-sm">Owner not found</div>
+              )}
             </div>
 
             {/* Members */}
@@ -580,7 +1067,7 @@ export default function GoalDetailsPage() {
                 </div>
               ) : (
                 <div className="text-gray-400 text-sm">
-                  No additional members
+                  No additional team members
                 </div>
               )}
             </div>
@@ -631,6 +1118,198 @@ export default function GoalDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Task Selection Modal */}
+      <Dialog open={showTasksModal} onOpenChange={setShowTasksModal}>
+        <DialogContent className="bg-[#252525] border-[#353535] text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect Tasks to Goal</DialogTitle>
+          </DialogHeader>
+          <div className="mb-4">
+            <div className="relative mb-4">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search tasks..."
+                className="pl-8 bg-[#1E1E1E] border-[#353535] text-white"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {selectedItems.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {selectedItems.map((id) => {
+                  const task = tasks.find((t) => t._id === id);
+                  return task ? (
+                    <Badge
+                      key={id}
+                      className="bg-[#4573D2] hover:bg-[#3A62B3] flex items-center gap-1 pl-2 pr-1 py-1"
+                    >
+                      {task.title}
+                      <button
+                        onClick={() => toggleItemSelection(id)}
+                        className="h-4 w-4 rounded-full flex items-center justify-center hover:bg-[#5a82d8] ml-1"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            )}
+
+            <div className="max-h-[300px] overflow-y-auto pr-1">
+              {filteredTasks.length > 0 ? (
+                filteredTasks.map((task) => (
+                  <div
+                    key={task._id}
+                    className="mb-2 p-3 rounded-md bg-[#1E1E1E] border border-[#353535] flex items-center gap-3"
+                  >
+                    <Checkbox
+                      id={`task-${task._id}`}
+                      checked={selectedItems.includes(task._id)}
+                      onCheckedChange={() => toggleItemSelection(task._id)}
+                    />
+                    <label
+                      htmlFor={`task-${task._id}`}
+                      className="flex-1 cursor-pointer"
+                    >
+                      <div className="font-medium">{task.title}</div>
+                      {task.description && (
+                        <div className="text-sm text-gray-400 truncate">
+                          {task.description}
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-gray-400">
+                  {searchQuery
+                    ? "No matching tasks found"
+                    : "No tasks available"}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <Button
+              variant="outline"
+              className="bg-transparent border-[#353535] text-white hover:bg-[#252525]"
+              onClick={() => setShowTasksModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#4573D2] hover:bg-[#3A62B3]"
+              disabled={selectedItems.length === 0 || savingChanges}
+              onClick={handleSaveSelectedTasks}
+            >
+              {savingChanges
+                ? "Saving..."
+                : `Connect ${selectedItems.length} Tasks`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Project Selection Modal */}
+      <Dialog open={showProjectsModal} onOpenChange={setShowProjectsModal}>
+        <DialogContent className="bg-[#252525] border-[#353535] text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect Projects to Goal</DialogTitle>
+          </DialogHeader>
+          <div className="mb-4">
+            <div className="relative mb-4">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search projects..."
+                className="pl-8 bg-[#1E1E1E] border-[#353535] text-white"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {selectedItems.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {selectedItems.map((id) => {
+                  const project = projects.find((p) => p._id === id);
+                  return project ? (
+                    <Badge
+                      key={id}
+                      className="bg-[#4573D2] hover:bg-[#3A62B3] flex items-center gap-1 pl-2 pr-1 py-1"
+                    >
+                      {project.name}
+                      <button
+                        onClick={() => toggleItemSelection(id)}
+                        className="h-4 w-4 rounded-full flex items-center justify-center hover:bg-[#5a82d8] ml-1"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            )}
+
+            <div className="max-h-[300px] overflow-y-auto pr-1">
+              {filteredProjects.length > 0 ? (
+                filteredProjects.map((project) => (
+                  <div
+                    key={project._id}
+                    className="mb-2 p-3 rounded-md bg-[#1E1E1E] border border-[#353535] flex items-center gap-3"
+                  >
+                    <div
+                      className="w-4 h-4 rounded-full"
+                      style={{ backgroundColor: project.color || "#4573D2" }}
+                    />
+                    <Checkbox
+                      id={`project-${project._id}`}
+                      checked={selectedItems.includes(project._id)}
+                      onCheckedChange={() => toggleItemSelection(project._id)}
+                    />
+                    <label
+                      htmlFor={`project-${project._id}`}
+                      className="flex-1 cursor-pointer"
+                    >
+                      <div className="font-medium">{project.name}</div>
+                      {project.description && (
+                        <div className="text-sm text-gray-400 truncate">
+                          {project.description}
+                        </div>
+                      )}
+                    </label>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-gray-400">
+                  {searchQuery
+                    ? "No matching projects found"
+                    : "No projects available"}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <Button
+              variant="outline"
+              className="bg-transparent border-[#353535] text-white hover:bg-[#252525]"
+              onClick={() => setShowProjectsModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#4573D2] hover:bg-[#3A62B3]"
+              disabled={selectedItems.length === 0 || savingChanges}
+              onClick={handleSaveSelectedProjects}
+            >
+              {savingChanges
+                ? "Saving..."
+                : `Connect ${selectedItems.length} Projects`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
