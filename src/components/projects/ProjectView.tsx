@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, MoreHorizontal } from "lucide-react";
-import { DragDropContext, DropResult } from "@hello-pangea/dnd";
+import { DropResult } from "@hello-pangea/dnd";
 import { getUserIdCookie } from "@/lib/cookies";
 
 import { BoardView } from "./board-view";
@@ -709,7 +709,7 @@ export function ProjectView({
     <div className="flex flex-col h-full">
       {/* Show the header bar with controls only for board and list views */}
       {(activeView === "board" || activeView === "list") && (
-        <div className="flex items-center justify-between px-4 h-14 border-b border-neutral-800">
+        <div className="flex items-center justify-between px-4 h-14 border-b border-neutral-800 bg-[#121212]">
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -717,30 +717,17 @@ export function ProjectView({
               onClick={() => {
                 if (project?.sections.length > 0) {
                   const firstSectionId = project.sections[0]._id;
-                  if (activeView === "board") {
-                    const boardViewRef = document.querySelector(
+                  if (activeView === "board" || activeView === "list") {
+                    const sectionRef = document.querySelector(
                       `[data-section-id="${firstSectionId}"]`
                     );
-                    if (boardViewRef) {
-                      const addTaskButton = boardViewRef.querySelector(
+                    if (sectionRef) {
+                      const addTaskButton = sectionRef.querySelector(
                         "button[data-add-task]"
                       ) as HTMLButtonElement;
                       if (addTaskButton) {
                         addTaskButton.click();
                       }
-                    }
-                  } else {
-                    const firstSection = project.sections[0];
-                    if (firstSection) {
-                      handleAddTask(firstSection._id, {
-                        title: "New Task",
-                        description: "",
-                        project: project._id,
-                        section: firstSection._id,
-                        assignee: null,
-                        status: "not started",
-                        order: firstSection.tasks.length,
-                      });
                     }
                   }
                 }
@@ -775,7 +762,7 @@ export function ProjectView({
       )}
 
       <div
-        className={`flex-1 ${
+        className={`flex-1 bg-[#121212] ${
           activeView === "overview" ? "h-full" : "p-6 overflow-x-auto"
         }`}
       >

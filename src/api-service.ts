@@ -14,6 +14,9 @@ import type {
   CreateGoalDto,
   UpdateGoalDto,
   Goal,
+  CreatePortfolioDto,
+  UpdatePortfolioDto,
+  Portfolio,
 } from "./types";
 import { type DashboardCard } from "./contexts/DashboardContext";
 import { getAuthCookie } from "./lib/cookies";
@@ -2787,6 +2790,232 @@ export const fetchTasks = async (filters?: {
     return data;
   } catch (error) {
     console.error("Error fetching tasks:", error);
+    throw error;
+  }
+};
+
+// Portfolio API functions
+export const fetchPortfolios = async (
+  workspaceId?: string
+): Promise<Portfolio[]> => {
+  try {
+    let url = `${API_BASE_URL}/portfolios`;
+
+    // Add workspaceId query param if provided
+    if (workspaceId) {
+      url += `?workspaceId=${workspaceId}`;
+    }
+
+    const response = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch portfolios: ${response.statusText}`);
+    }
+
+    const portfolios = await response.json();
+    return portfolios;
+  } catch (error) {
+    console.error("Error fetching portfolios:", error);
+    return []; // Return empty array instead of throwing to prevent UI errors
+  }
+};
+
+export const fetchPortfolioById = async (
+  portfolioId: string
+): Promise<Portfolio> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch portfolio: ${response.statusText}`);
+    }
+
+    const portfolio = await response.json();
+
+    // Debug the response data
+    console.log("API Response - fetchPortfolioById:", portfolio);
+
+    // Check if projects are populated properly
+    if (portfolio.projects) {
+      console.log(
+        "API Response - Projects data structure:",
+        Array.isArray(portfolio.projects)
+          ? `Array with ${portfolio.projects.length} items`
+          : typeof portfolio.projects
+      );
+
+      // Check the first project to see its structure
+      if (Array.isArray(portfolio.projects) && portfolio.projects.length > 0) {
+        console.log(
+          "API Response - First project example:",
+          portfolio.projects[0]
+        );
+      }
+    }
+
+    return portfolio;
+  } catch (error) {
+    console.error(`Error fetching portfolio ${portfolioId}:`, error);
+    throw error;
+  }
+};
+
+export const createPortfolio = async (
+  portfolioData: CreatePortfolioDto
+): Promise<Portfolio> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/portfolios`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(portfolioData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to create portfolio");
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error creating portfolio:", error);
+    throw error;
+  }
+};
+
+export const updatePortfolio = async (
+  portfolioId: string,
+  updates: UpdatePortfolioDto
+): Promise<Portfolio> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to update portfolio");
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error updating portfolio:", error);
+    throw error;
+  }
+};
+
+export const deletePortfolio = async (portfolioId: string): Promise<void> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/portfolios/${portfolioId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to delete portfolio");
+    }
+  } catch (error) {
+    console.error("Error deleting portfolio:", error);
+    throw error;
+  }
+};
+
+export const addProjectToPortfolio = async (
+  portfolioId: string,
+  projectId: string
+): Promise<Portfolio> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/portfolios/${portfolioId}/projects/${projectId}`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        errorData.message || "Failed to add project to portfolio"
+      );
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error adding project to portfolio:", error);
+    throw error;
+  }
+};
+
+export const removeProjectFromPortfolio = async (
+  portfolioId: string,
+  projectId: string
+): Promise<Portfolio> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/portfolios/${portfolioId}/projects/${projectId}`,
+      {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        errorData.message || "Failed to remove project from portfolio"
+      );
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error removing project from portfolio:", error);
+    throw error;
+  }
+};
+
+export const calculatePortfolioMetrics = async (
+  portfolioId: string
+): Promise<{ status: string; progress: number }> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/portfolios/${portfolioId}/calculate-metrics`,
+      {
+        headers: getAuthHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        errorData.message || "Failed to calculate portfolio metrics"
+      );
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error("Error calculating portfolio metrics:", error);
+    throw error;
+  }
+};
+
+export const updatePortfolioProjectsOrder = async (
+  portfolioId: string,
+  projectIds: string[]
+): Promise<Portfolio> => {
+  try {
+    // We're using the existing updatePortfolio function with just the projects array
+    return await updatePortfolio(portfolioId, {
+      projects: projectIds,
+    });
+  } catch (error) {
+    console.error("Error updating portfolio projects order:", error);
     throw error;
   }
 };

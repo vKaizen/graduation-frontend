@@ -49,6 +49,8 @@ import { SortConfig } from "./sort-menu";
 import { fetchProjectMembers } from "@/api-service";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
+import { MuiDatePickerComponent } from "@/components/ui/mui-date-picker";
+
 interface ListViewProps {
   project: Project;
   collapsedSections: Record<string, boolean>;
@@ -612,19 +614,23 @@ export function ListView({
             </Select>
           </td>
           <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
-            <Input
-              type="date"
-              value={newTaskData[section._id]?.dueDate || ""}
-              onChange={(e) =>
+            <MuiDatePickerComponent
+              date={
+                newTaskData[section._id]?.dueDate
+                  ? new Date(newTaskData[section._id].dueDate)
+                  : undefined
+              }
+              onDateChange={(date) =>
                 setNewTaskData((prev) => ({
                   ...prev,
                   [section._id]: {
                     ...prev[section._id],
-                    dueDate: e.target.value,
+                    dueDate: date ? date.toISOString().split("T")[0] : "",
                   },
                 }))
               }
-              className="h-9 bg-[#353535] border-0 text-sm text-white placeholder:text-neutral-500"
+              placeholder="Due date"
+              className="h-9"
             />
           </td>
           <td className="p-2 pl-4 border-b border-[#353535] w-1/6">
@@ -652,9 +658,8 @@ export function ListView({
                 </SelectContent>
               </Select>
               <Button
-                variant="ghost"
                 size="sm"
-                className="h-9 px-2 hover:text-neutral-300"
+                className="h-9 px-3 bg-[#454545] text-white hover:bg-[#555555]"
                 onClick={() =>
                   handleUpdateTask(task._id, {
                     title: newTaskData[section._id]?.title || "",
@@ -845,7 +850,7 @@ export function ListView({
   };
 
   return (
-    <div className="px-4">
+    <div className="px-4 bg-[#121212]">
       <div className="flex items-center justify-between mb-6">
         <div className="flex-1">
           {selectedTasks.length > 0 && (
@@ -909,7 +914,7 @@ export function ListView({
 
       <DragDropContext onDragEnd={onDragEnd}>
         {filteredAndSortedTasks.map((section) => (
-          <div key={section._id} className="mb-2">
+          <div key={section._id} className="mb-2" data-section-id={section._id}>
             <div className="flex items-center gap-2 py-2 pl-2">
               <button
                 onClick={() => toggleSection(section._id)}
@@ -1099,19 +1104,24 @@ export function ListView({
                               </Select>
                             </td>
                             <td className="p-2 border-b border-[#353535] w-1/6">
-                              <Input
-                                type="date"
-                                value={newTaskData[section._id]?.dueDate || ""}
-                                onChange={(e) =>
+                              <MuiDatePickerComponent
+                                date={
+                                  newTaskData[section._id]?.dueDate
+                                    ? new Date(newTaskData[section._id].dueDate)
+                                    : null
+                                }
+                                onDateChange={(date) =>
                                   setNewTaskData((prev) => ({
                                     ...prev,
                                     [section._id]: {
                                       ...prev[section._id],
-                                      dueDate: e.target.value,
+                                      dueDate: date
+                                        ? date.toISOString().split("T")[0]
+                                        : "",
                                     },
                                   }))
                                 }
-                                className="h-9 bg-[#353535] border-0 text-sm text-white placeholder:text-neutral-500"
+                                className="h-9"
                               />
                             </td>
                             <td className="p-2 border-b border-[#353535] w-1/6">
@@ -1143,9 +1153,8 @@ export function ListView({
                                   </SelectContent>
                                 </Select>
                                 <Button
-                                  variant="ghost"
                                   size="sm"
-                                  className="h-9 px-2 hover:text-neutral-300"
+                                  className="h-9 px-3 bg-[#454545] text-white hover:bg-[#555555]"
                                   onClick={() => handleAddTask(section._id)}
                                 >
                                   Save
@@ -1163,6 +1172,7 @@ export function ListView({
                               size="sm"
                               className="w-full justify-start gap-2 px-6 py-2 text-neutral-500 hover:text-white hover:bg-[#252525] transition-colors"
                               onClick={() => handleCreateTask(section._id)}
+                              data-add-task
                             >
                               <Plus className="h-4 w-4" />
                               Add task
@@ -1195,7 +1205,7 @@ export function ListView({
           onClose={() => {
             setSelectedTask(null);
           }}
-          onUpdate={handleTaskUpdate}
+          onUpdate={handleUpdateTask}
           onDelete={() =>
             handleDeleteTask(selectedTask.project.id, selectedTask._id)
           }

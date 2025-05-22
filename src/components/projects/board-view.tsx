@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/select";
 import {
   User2,
-  Calendar,
   Trash2,
   ChevronDown,
   ChevronRight,
@@ -35,6 +34,7 @@ import { TaskCard } from "./Task-card";
 import { TaskDetails } from "./task-details";
 import { getAuthCookie } from "@/lib/cookies";
 import { jwtDecode } from "jwt-decode";
+import { MuiDatePickerComponent } from "@/components/ui/mui-date-picker";
 
 interface BoardViewProps {
   project: Project;
@@ -596,7 +596,7 @@ export function BoardView({
 
   return (
     <>
-      <div className="px-4">
+      <div className="px-4 bg-[#121212]">
         <div className="flex items-center justify-between mb-6">
           <div className="flex-1">
             {selectedTasks.length > 0 && (
@@ -667,6 +667,7 @@ export function BoardView({
                               "flex flex-col w-80 shrink-0",
                               snapshot.isDragging && "opacity-50"
                             )}
+                            data-section-id={section._id}
                           >
                             <div className="flex items-center justify-between gap-2 py-2 group">
                               <div className="flex items-center gap-2">
@@ -803,17 +804,7 @@ export function BoardView({
                                       </Draggable>
                                     ))}
                                     {provided.placeholder}
-                                    <Button
-                                      key={`add-task-button-${section._id}`}
-                                      variant="ghost"
-                                      className="w-full justify-start text-neutral-500 hover:text-neutral-400 hover:bg-[#353535]"
-                                      onClick={() =>
-                                        handleCreateTask(section._id)
-                                      }
-                                    >
-                                      <Plus className="h-4 w-4 mr-2" />
-                                      Add task
-                                    </Button>
+
                                     {newTaskData[section._id]?.isCreating && (
                                       <div className="p-3 rounded-lg bg-[#1a1a1a]">
                                         <Input
@@ -886,47 +877,34 @@ export function BoardView({
                                               </SelectContent>
                                             </Select>
                                           </div>
-                                          <div className="flex items-center bg-[#353535] rounded-md h-7 px-2 min-w-[110px]">
-                                            <Calendar className="h-3.5 w-3.5 text-neutral-400 mr-1.5" />
-                                            <div className="relative w-full">
-                                              <input
-                                                type="date"
-                                                value={
-                                                  newTaskData[section._id]
-                                                    ?.dueDate || ""
-                                                }
-                                                onChange={(e) =>
-                                                  setNewTaskData((prev) => ({
-                                                    ...prev,
-                                                    [section._id]: {
-                                                      ...prev[section._id],
-                                                      dueDate: e.target.value,
-                                                    },
-                                                  }))
-                                                }
-                                                className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark]"
-                                                onKeyDown={(e) =>
-                                                  handleKeyDown(e, section._id)
-                                                }
-                                              />
-                                              <span className="text-xs truncate text-neutral-400">
-                                                {newTaskData[section._id]
+                                          <div className="min-w-[110px] h-7">
+                                            <MuiDatePickerComponent
+                                              date={
+                                                newTaskData[section._id]
                                                   ?.dueDate
                                                   ? new Date(
                                                       newTaskData[
                                                         section._id
                                                       ].dueDate
-                                                    ).toLocaleDateString(
-                                                      "en-US",
-                                                      {
-                                                        month: "short",
-                                                        day: "numeric",
-                                                        year: "numeric",
-                                                      }
                                                     )
-                                                  : "Due date"}
-                                              </span>
-                                            </div>
+                                                  : null
+                                              }
+                                              onDateChange={(date) =>
+                                                setNewTaskData((prev) => ({
+                                                  ...prev,
+                                                  [section._id]: {
+                                                    ...prev[section._id],
+                                                    dueDate: date
+                                                      ? date
+                                                          .toISOString()
+                                                          .split("T")[0]
+                                                      : "",
+                                                  },
+                                                }))
+                                              }
+                                              placeholder="Due date"
+                                              className="h-7 text-xs"
+                                            />
                                           </div>
                                           <div className="flex items-center bg-[#353535] rounded-md h-7 px-2 min-w-[90px]">
                                             <Select
@@ -982,11 +960,12 @@ export function BoardView({
                                         </div>
                                         <div className="flex items-center justify-end space-x-2 mt-2">
                                           <Button
-                                            variant="ghost"
+                                            variant="outline"
                                             size="sm"
                                             onClick={() =>
                                               handleCancelCreate(section._id)
                                             }
+                                            className="h-8 bg-transparent border-[#353535] text-neutral-300 hover:bg-[#252525] hover:text-white"
                                           >
                                             Cancel
                                           </Button>
@@ -995,12 +974,26 @@ export function BoardView({
                                             onClick={() =>
                                               handleAddTask(section._id)
                                             }
+                                            className="h-8 bg-[#353535] text-white hover:bg-[#454545]"
                                           >
                                             Create
                                           </Button>
                                         </div>
                                       </div>
                                     )}
+
+                                    <Button
+                                      key={`add-task-button-${section._id}`}
+                                      variant="ghost"
+                                      className="w-full justify-start text-neutral-500 hover:text-neutral-400 hover:bg-[#353535]"
+                                      onClick={() =>
+                                        handleCreateTask(section._id)
+                                      }
+                                      data-add-task
+                                    >
+                                      <Plus className="h-4 w-4 mr-2" />
+                                      Add task
+                                    </Button>
                                   </div>
                                 )}
                               </Droppable>

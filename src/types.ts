@@ -215,3 +215,31 @@ export interface UpdateGoalDto {
   workspaceId?: string;
   progressResource?: "projects" | "tasks" | "none";
 }
+
+export interface Portfolio {
+  _id: string;
+  name: string;
+  description?: string;
+  projects: string[] | Project[];
+  status?: "on-track" | "at-risk" | "off-track" | "completed" | "no-status";
+  progress: number;
+  workspaceId: string;
+  workspace?: Workspace;
+  owner: string | User;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreatePortfolioDto {
+  name: string;
+  description?: string;
+  projects: string[];
+  workspaceId: string;
+}
+
+export interface UpdatePortfolioDto {
+  name?: string;
+  description?: string;
+  projects?: string[];
+  status?: "on-track" | "at-risk" | "off-track" | "completed" | "no-status";
+}

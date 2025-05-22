@@ -435,9 +435,9 @@ export const StrategyMapView = ({
 
                 const taskNode: Node = {
                   id: taskNodeId,
-                  type: "goalNode",
+              type: "goalNode",
                   position: { x: taskX, y: PROGRESS_SOURCE_LEVEL_Y },
-                  data: {
+              data: {
                     _id: taskNodeId,
                     title: taskData.title || `Task ${taskIndex + 1}`,
                     description: taskData.description || "",
@@ -462,8 +462,8 @@ export const StrategyMapView = ({
                     strokeWidth: 5,
                     strokeDasharray: "5,5",
                   },
-                  markerEnd: {
-                    type: MarkerType.ArrowClosed,
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
                     color: "red",
                     width: 20,
                     height: 20,

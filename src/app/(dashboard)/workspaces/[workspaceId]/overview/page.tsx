@@ -198,7 +198,7 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
   };
 
   return (
-    <div className="px-6 py-8 bg-[#111111] min-h-full flex flex-col">
+    <div className="px-6 py-8 bg-[#121212] min-h-full flex flex-col">
       <div className="grid grid-cols-3 gap-8 flex-1">
         {/* Main Content - Curated Work */}
         <div className="col-span-2">

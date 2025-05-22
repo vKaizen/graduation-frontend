@@ -3,19 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { Project, TaskActivity } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
-import {
-  CalendarClock,
-  CheckCircle,
-  AlertCircle,
-  AlertTriangle,
-  Info,
-  Clock,
-  User,
-  Pencil,
-} from "lucide-react";
+import { CalendarClock, CheckCircle, Info, Pencil } from "lucide-react";
 import {
   fetchProjectActivities,
   updateProjectStatus as apiUpdateProjectStatus,
@@ -23,6 +13,7 @@ import {
   fetchUserById,
   fetchUsers,
 } from "@/api-service";
+import { ProjectMemberAddModal } from "./ProjectMemberAddModal";
 
 interface OverviewProps {
   project: Project;
@@ -330,8 +321,19 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
     return "Unknown User";
   };
 
+  // Add a function to refresh the project after adding a member
+  const handleMemberAdded = () => {
+    // Call the parent's update function to trigger project refresh
+    updateProjectStatus();
+
+    // Also refresh activity logs
+    refreshActivityLogs();
+
+    console.log("Member added, refreshing project data");
+  };
+
   return (
-    <div className="h-full flex flex-col bg-black text-white">
+    <div className="h-full flex flex-col bg-[#121212] text-white">
       {/* Custom scrollbar styles */}
       <style jsx global>{`
         ::-webkit-scrollbar {
@@ -339,7 +341,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
           height: 8px;
         }
         ::-webkit-scrollbar-track {
-          background: #111111;
+          background: #1a1a1a;
           border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb {
@@ -370,7 +372,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
           </div>
 
           {/* Project Description */}
-          <div className="bg-[#111111] rounded-lg p-6 mb-8">
+          <div className="bg-[#1a1a1a] rounded-lg p-6 mb-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Project description</h2>
               {isEditing ? (
@@ -425,20 +427,16 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold">Project roles</h2>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-dashed border-[#454545] text-neutral-400 hover:text-white"
-              >
-                <User className="h-4 w-4 mr-2" />
-                Add member
-              </Button>
+              <ProjectMemberAddModal
+                project={project}
+                onMemberAdded={handleMemberAdded}
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {project.roles.map((role, index) => (
                 <div
                   key={index}
-                  className="flex items-center gap-3 bg-[#111111] rounded-lg p-4 hover:bg-[#1a1a1a] transition-colors"
+                  className="flex items-center gap-3 bg-[#1a1a1a] rounded-lg p-4 hover:bg-[#1a1a1a] transition-colors"
                 >
                   <Avatar className="h-10 w-10 bg-[#252525]">
                     <AvatarFallback className="bg-violet-700 text-white">
@@ -460,7 +458,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
         {/* Right sidebar - 30% width - scrollable */}
         <div className="w-full lg:w-[30%] h-full lg:border-l border-[#222222] flex-shrink-0 overflow-y-auto p-6">
           {/* Project Status */}
-          <div className="bg-[#111111] rounded-lg p-5 mb-8">
+          <div className="bg-[#1a1a1a] rounded-lg p-5 mb-8">
             <h2 className="text-lg font-semibold mb-4">Project status</h2>
             <div className="flex flex-col gap-2">
               <Button
@@ -541,7 +539,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
                 {activities.map((activity, index) => (
                   <div
                     key={index}
-                    className="flex gap-3 bg-[#111111] rounded-lg p-3 hover:bg-[#1a1a1a] transition-colors"
+                    className="flex gap-3 bg-[#1a1a1a] rounded-lg p-3 hover:bg-[#1a1a1a] transition-colors"
                   >
                     <div className="h-8 w-8 rounded-full bg-[#252525] flex items-center justify-center flex-shrink-0">
                       {activity.type === "created" && (

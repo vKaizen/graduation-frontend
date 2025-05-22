@@ -226,29 +226,29 @@ export function NewGoalForm() {
     if (!validateFirstStep()) {
       return;
     }
-  
+
     setIsLoading(true);
     setError("");
-  
+
     try {
       console.log("=== STARTING GOAL CREATION ===");
       console.log("Selected members before creation:", selectedMembers);
-  
+
       // Get current user ID - prioritize the authenticated user ID from authState
       const currentUserId = authState.userId || currentUser?._id;
-  
+
       if (!currentUserId) {
         throw new Error("No user found to set as owner");
       }
-  
+
       console.log("Creating goal with owner ID:", currentUserId);
-  
+
       // Merge owner + any selected members into one unique array
       const membersList = Array.from(
         new Set([currentUserId, ...selectedMembers])
       );
       console.log("Final members list for goal creation:", membersList);
-  
+
       const goalData: CreateGoalDto = {
         title: goalTitle,
         description: goalDescription,
@@ -268,15 +268,15 @@ export function NewGoalForm() {
         progressResource: progressResource,
         members: membersList, // <— always include owner + selections
       };
-  
+
       console.log("Creating goal with data:", goalData);
       console.log("Progress resource:", progressResource);
       console.log("Selected members:", selectedMembers);
       console.log("Members field in goal data:", goalData.members);
-  
+
       const newGoal = await createGoal(goalData);
       console.log("Created goal response:", newGoal);
-  
+
       if (newGoal && newGoal._id) {
         // Redirect to the goals page
         router.push(
@@ -296,7 +296,6 @@ export function NewGoalForm() {
       setIsLoading(false);
     }
   };
-  
 
   // Helper to generate a description using AI
   const generateDescription = () => {
