@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { AlertTriangle, Settings } from "lucide-react";
+import { AlertTriangle, Settings, Trash2 } from "lucide-react";
 import { Portfolio, Project } from "@/types";
 import {
   fetchPortfolioById,
   deletePortfolio,
   removeProjectFromPortfolio,
   fetchProject,
+  updatePortfolio,
 } from "@/api-service";
 import { useToast } from "@/components/ui/use-toast";
 import Link from "next/link";
@@ -39,6 +40,7 @@ export default function PortfolioDetailsPage({
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("list");
+  const [isUpdatingProgress, setIsUpdatingProgress] = useState(false);
 
   // Fetch portfolio
   useEffect(() => {
@@ -188,6 +190,46 @@ export default function PortfolioDetailsPage({
     setActiveTab(tab);
   };
 
+  // Handle progress updates from task calculation
+  const handleProgressCalculated = async (progress: number) => {
+    if (!portfolio) return;
+
+    // Only update if the progress is different from the current value
+    if (progress === portfolio.progress) return;
+
+    try {
+      setIsUpdatingProgress(true);
+
+      // Update portfolio in database with new progress
+      const updatedPortfolio = await updatePortfolio(portfolio._id, {
+        progress,
+      });
+
+      // Update local state
+      setPortfolio(updatedPortfolio);
+
+      console.log(
+        `Updated portfolio progress from ${portfolio.progress}% to ${progress}%`
+      );
+
+      // Show toast notification for progress update
+      toast({
+        title: "Portfolio Progress Updated",
+        description: `Progress has been updated to ${progress}%`,
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Error updating portfolio progress:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update portfolio progress",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingProgress(false);
+    }
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -217,7 +259,10 @@ export default function PortfolioDetailsPage({
       {/* Fixed header */}
       <div className="sticky top-0 z-10">
         {/* Header */}
-        <PortfolioHeader portfolio={portfolio} />
+        <PortfolioHeader
+          portfolio={portfolio}
+          isUpdatingProgress={isUpdatingProgress}
+        />
 
         {/* Tabs */}
         <PortfolioTabs activeTab={activeTab} onTabChange={handleTabChange} />
@@ -230,6 +275,7 @@ export default function PortfolioDetailsPage({
           portfolio={portfolio}
           projectsData={projectsData}
           onRemoveProject={handleRemoveProject}
+          onProgressCalculated={handleProgressCalculated}
         />
       </div>
 
@@ -248,7 +294,7 @@ export default function PortfolioDetailsPage({
           title="Delete Portfolio"
           disabled={isDeleting}
         >
-          <AlertTriangle className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" />
         </button>
       </div>
     </div>

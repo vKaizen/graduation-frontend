@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, Fragment, useMemo } from "react";
+import { useState, useEffect, Fragment, useMemo, useCallback } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ import { TaskDetails } from "./task-details";
 import { getAuthCookie } from "@/lib/cookies";
 import { jwtDecode } from "jwt-decode";
 import { MuiDatePickerComponent } from "@/components/ui/mui-date-picker";
+import { getInitials } from "@/lib/user-utils";
 
 interface BoardViewProps {
   project: Project;
@@ -117,6 +118,7 @@ export function BoardView({
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("title");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [updateCounter, setUpdateCounter] = useState(0);
 
   const getAssigneeName = (assigneeId: string | null): string => {
     if (!assigneeId) return "Unassigned";
@@ -187,91 +189,179 @@ export function BoardView({
     }
   };
 
-  const handleUpdateTask = (
-    sectionId: string,
-    taskId: string,
-    updates: Partial<Task>
-  ) => {
-    console.log("🔍 [BoardView] handleUpdateTask called with:", {
-      sectionId,
-      taskId,
-      updates,
-    });
+  const handleUpdateTask = useCallback(
+    (sectionId: string, taskId: string, updates: Partial<Task>) => {
+      console.log("🔍 [BoardView] handleUpdateTask called with:", {
+        sectionId,
+        taskId,
+        updates,
+      });
 
-    // Check if sectionId exists before proceeding
-    if (!sectionId) {
-      console.error("Missing sectionId for task update:", taskId);
-      return;
-    }
+      // Check if sectionId exists before proceeding
+      if (!sectionId) {
+        console.error("Missing sectionId for task update:", taskId);
+        return;
+      }
 
-    // Extract updatedBy and updatedByName from the updates if they exist
-    let { updatedBy, updatedByName } = updates;
+      // Handle task status updates for completion
+      let updatedSection = sectionId;
+      const task = project.sections
+        .find((s) => s._id === sectionId)
+        ?.tasks.find((t) => t._id === taskId);
 
-    // If updatedBy and updatedByName are not provided, get them from the JWT token
-    if (!updatedBy || !updatedByName) {
-      try {
-        // Get token from cookie
-        const token = getAuthCookie();
-        if (token) {
-          // Decode the token to extract user information
-          const decoded: any = jwtDecode(token);
-          if (decoded && decoded.sub) {
-            updatedBy = decoded.sub;
+      if (task && updates.status) {
+        // For task completion status changes, we need to find the appropriate section
+        const completedSection = project.sections.find(
+          (s) => s.title.toLowerCase() === "completed"
+        );
+        const todoSection = project.sections.find(
+          (s) =>
+            s.title.toLowerCase() === "to do" ||
+            s.title.toLowerCase() === "not started"
+        );
 
-            // Extract the user's fullName from the token, or try other identifier fields
-            // Format the name nicely if we only have an email
-            if (decoded.email && !decoded.fullName && !decoded.name) {
-              // If we have an email but no name, extract the name part from the email
-              // e.g., "john.doe@example.com" becomes "John Doe"
-              const emailName = decoded.email.split("@")[0];
-              const formattedName = emailName
-                .replace(/[._-]/g, " ") // Replace dots, underscores, and hyphens with spaces
-                .split(" ")
-                .map(
-                  (word: string) =>
-                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                )
-                .join(" ");
-              updatedByName = formattedName;
-            } else {
-              // Use available name fields with fallbacks
-              updatedByName =
-                decoded.fullName ||
-                decoded.name ||
-                decoded.username ||
-                "Unknown User";
+        if (updates.status === "completed" && completedSection) {
+          updatedSection = completedSection._id;
+        } else if (updates.status === "not started" && todoSection) {
+          updatedSection = todoSection._id;
+        }
+      }
+
+      // Extract updatedBy and updatedByName from the updates if they exist
+      let { updatedBy, updatedByName } = updates;
+
+      // If updatedBy and updatedByName are not provided, get them from the JWT token
+      if (!updatedBy || !updatedByName) {
+        try {
+          // Get token from cookie
+          const token = getAuthCookie();
+          if (token) {
+            // Decode the token to extract user information
+            const decoded: any = jwtDecode(token);
+            if (decoded && decoded.sub) {
+              updatedBy = decoded.sub;
+
+              // Extract the user's fullName from the token, or try other identifier fields
+              // Format the name nicely if we only have an email
+              if (decoded.email && !decoded.fullName && !decoded.name) {
+                // If we have an email but no name, extract the name part from the email
+                // e.g., "john.doe@example.com" becomes "John Doe"
+                const emailName = decoded.email.split("@")[0];
+                const formattedName = emailName
+                  .replace(/[._-]/g, " ") // Replace dots, underscores, and hyphens with spaces
+                  .split(" ")
+                  .map(
+                    (word: string) =>
+                      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                  )
+                  .join(" ");
+                updatedByName = formattedName;
+              } else {
+                // Use available name fields with fallbacks
+                updatedByName =
+                  decoded.fullName ||
+                  decoded.name ||
+                  decoded.username ||
+                  "Unknown User";
+              }
             }
           }
+        } catch (error) {
+          console.error("Error extracting user info from token:", error);
         }
-      } catch (error) {
-        console.error("Error extracting user info from token:", error);
       }
-    }
 
-    // Extract only the properties that exist in the Task type
-    const taskUpdates: Partial<Task> = {
-      ...updates,
-      // Add updater information if not already present
-      updatedBy,
-      updatedByName,
-    };
+      // Extract only the properties that exist in the Task type
+      const taskUpdates: Partial<Task> = {
+        ...updates,
+        // Add updater information if not already present
+        updatedBy,
+        updatedByName,
+      };
 
-    console.log(
-      "🔍 [BoardView] Updating task with complete info:",
-      taskUpdates
-    );
+      // If the task is being marked as complete, make sure status is also set
+      if (taskUpdates.completed === true && !taskUpdates.status) {
+        taskUpdates.status = "completed";
+      }
+      // If task is being marked as incomplete, update status accordingly
+      else if (taskUpdates.completed === false && !taskUpdates.status) {
+        taskUpdates.status = "not started";
+      }
 
-    // Update the task in the project
-    updateTask(sectionId, taskId, taskUpdates);
+      console.log(
+        "🔍 [BoardView] Updating task with complete info:",
+        taskUpdates
+      );
 
-    // Clear editing state
-    setEditingTask(null);
+      // Update the task in the project with the potentially new section
+      updateTask(updatedSection, taskId, taskUpdates);
 
-    // Update the selected task if it's open
-    if (selectedTask && selectedTask._id === taskId) {
-      setSelectedTask((prev) => (prev ? { ...prev, ...updates } : null));
-    }
-  };
+      // Clear editing state
+      setEditingTask(null);
+
+      // Update the selected task if it's open in the task details panel
+      if (selectedTask && selectedTask._id === taskId) {
+        // Create a deep copy with all updates applied
+        const updatedTaskDetails = {
+          ...selectedTask,
+          ...taskUpdates,
+          // Make sure to update the status in the project object too
+          project: {
+            ...selectedTask.project,
+            status: taskUpdates.status || selectedTask.project.status,
+          },
+        };
+
+        console.log(
+          "🔍 [BoardView] Updating selected task:",
+          updatedTaskDetails
+        );
+        setSelectedTask(updatedTaskDetails);
+      }
+
+      // Force a rerender of the component to reflect UI changes immediately
+      setUpdateCounter((prev) => prev + 1);
+
+      // If we're moving the task between sections, use the drag and drop handler
+      if (updatedSection !== sectionId) {
+        // Find the destination index (at the end of the target section)
+        const destIndex =
+          project.sections.find((s) => s._id === updatedSection)?.tasks
+            .length || 0;
+
+        // Find the source index
+        const sourceIndex =
+          project.sections
+            .find((s) => s._id === sectionId)
+            ?.tasks.findIndex((t) => t._id === taskId) || 0;
+
+        // Use the existing drag and drop handler
+        onDragEnd({
+          destination: {
+            droppableId: updatedSection,
+            index: destIndex,
+          },
+          source: {
+            droppableId: sectionId,
+            index: sourceIndex,
+          },
+          draggableId: taskId,
+          type: "task",
+          mode: "FLUID",
+          reason: "DROP",
+          combine: null, // Adding the required combine property
+        } as DropResult);
+      }
+    },
+    [
+      project,
+      selectedTask,
+      updateTask,
+      onDragEnd,
+      setSelectedTask,
+      setEditingTask,
+    ]
+  );
 
   const handleKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement>,
@@ -852,7 +942,12 @@ export function BoardView({
                                               <SelectTrigger className="border-0 p-0 h-auto bg-transparent w-full">
                                                 <span className="text-xs truncate text-white">
                                                   {newTaskData[section._id]
-                                                    ?.assignee || "Assign"}
+                                                    ?.assignee
+                                                    ? getAssigneeName(
+                                                        newTaskData[section._id]
+                                                          .assignee
+                                                      )
+                                                    : "Assign"}
                                                 </span>
                                               </SelectTrigger>
                                               <SelectContent className="bg-[#353535] border-[#1a1a1a]">
@@ -902,7 +997,6 @@ export function BoardView({
                                                   },
                                                 }))
                                               }
-                                              placeholder="Due date"
                                               className="h-7 text-xs"
                                             />
                                           </div>

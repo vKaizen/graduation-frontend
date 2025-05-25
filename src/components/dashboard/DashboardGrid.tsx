@@ -2,20 +2,11 @@
 
 import { useState, useEffect } from "react";
 import {
-  DndContext,
-  type DragEndEvent,
-  DragOverlay,
-  type DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from "@hello-pangea/dnd";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TasksCard } from "./TasksCard";
@@ -90,47 +81,6 @@ function CardRenderer({
   );
 }
 
-// Sortable card wrapper
-function SortableCard({ card }: { card: DashboardCard }) {
-  const { removeCard } = useDashboard();
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: card.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 10 : 1,
-    height: "350px", // Fixed height to match BaseCard
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "transition-all duration-200 ease-in-out h-[350px]",
-        card.fullWidth ? "col-span-full" : "col-span-1"
-      )}
-      {...attributes}
-      {...listeners}
-    >
-      <CardRenderer
-        type={card.type}
-        onRemove={() => removeCard(card.id)}
-        cardId={card.id}
-        isFullWidth={!!card.fullWidth}
-      />
-    </div>
-  );
-}
-
 // Simple grid for server-side rendering
 function SimpleGrid({ cards }: { cards: DashboardCard[] }) {
   const visibleCards = cards.filter((card) => card.visible);
@@ -160,7 +110,6 @@ function SimpleGrid({ cards }: { cards: DashboardCard[] }) {
 // Main dashboard grid component
 export function DashboardGrid() {
   const { cards, reorderCards } = useDashboard();
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
 
   // Only enable client-side rendering after mount
@@ -171,35 +120,27 @@ export function DashboardGrid() {
   // Only show visible cards
   const visibleCards = cards.filter((card) => card.visible);
 
-  // Configure sensors for drag detection
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // Minimum drag distance before activation
-      },
-    })
-  );
-
-  // Handle drag start
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-  };
-
   // Handle drag end
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+  const handleDragEnd = (result: DropResult) => {
+    const { destination, source } = result;
 
-    if (over && active.id !== over.id) {
-      reorderCards(active.id as string, over.id as string);
+    // If dropped outside the list or didn't move
+    if (
+      !destination ||
+      (destination.droppableId === source.droppableId &&
+        destination.index === source.index)
+    ) {
+      return;
     }
 
-    setActiveId(null);
-  };
+    // Get the dragged card ID
+    const draggedCardId = visibleCards[source.index].id;
+    // Get the card ID we dropped onto (or its position)
+    const targetCardId = visibleCards[destination.index].id;
 
-  // Find the active card for overlay
-  const activeCard = activeId
-    ? cards.find((card) => card.id === activeId)
-    : null;
+    // Call the reorder function
+    reorderCards(draggedCardId, targetCardId);
+  };
 
   // Use a simple grid for server-side rendering, and DnD for client-side
   if (!isClient) {
@@ -207,40 +148,46 @@ export function DashboardGrid() {
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext
-        items={visibleCards.map((card) => card.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
-          {visibleCards.map((card) => (
-            <SortableCard key={card.id} card={card} />
-          ))}
-        </div>
-      </SortableContext>
-
-      {/* Drag overlay for visual feedback */}
-      <DragOverlay adjustScale={false}>
-        {activeId && activeCard && (
+    <DragDropContext onDragEnd={handleDragEnd}>
+      <Droppable droppableId="dashboard-grid" direction="vertical">
+        {(provided) => (
           <div
-            className={cn(
-              "opacity-80 h-[350px]",
-              activeCard.fullWidth ? "w-full" : "w-[calc(50%-0.5rem)]"
-            )}
+            className="grid gap-4 md:grid-cols-2 lg:grid-cols-2"
+            ref={provided.innerRef}
+            {...provided.droppableProps}
           >
-            <CardRenderer
-              type={activeCard.type}
-              onRemove={() => {}}
-              cardId={activeCard.id}
-              isFullWidth={!!activeCard.fullWidth}
-            />
+            {visibleCards.map((card, index) => (
+              <Draggable key={card.id} draggableId={card.id} index={index}>
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    {...provided.dragHandleProps}
+                    className={cn(
+                      "transition-all duration-200 ease-in-out h-[350px]",
+                      card.fullWidth ? "col-span-full" : "col-span-1",
+                      snapshot.isDragging
+                        ? "opacity-60 z-10"
+                        : "opacity-100 z-1"
+                    )}
+                    style={{
+                      ...provided.draggableProps.style,
+                    }}
+                  >
+                    <CardRenderer
+                      type={card.type}
+                      onRemove={() => useDashboard().removeCard(card.id)}
+                      cardId={card.id}
+                      isFullWidth={!!card.fullWidth}
+                    />
+                  </div>
+                )}
+              </Draggable>
+            ))}
+            {provided.placeholder}
           </div>
         )}
-      </DragOverlay>
-    </DndContext>
+      </Droppable>
+    </DragDropContext>
   );
 }

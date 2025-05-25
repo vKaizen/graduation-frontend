@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Sheet,
   SheetContent,
@@ -41,6 +41,9 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { formatUsername, getInitials } from "@/lib/user-utils";
+import { fetchUserById, fetchProjectMembers } from "@/api-service";
+import { format } from "date-fns";
 
 interface TaskActivity {
   type: "commented" | "created" | "completed";
@@ -52,16 +55,57 @@ interface TaskActivity {
 interface TaskDetailsProps {
   task: TaskDetailsType | null;
   onClose: () => void;
-  onUpdate: (taskId: string, updates: Partial<TaskDetailsType>) => void;
+  onUpdate:
+    | ((taskId: string, updates: Partial<TaskDetailsType>) => void)
+    | ((
+        sectionId: string,
+        taskId: string,
+        updates: Partial<TaskDetailsType>
+      ) => void);
   onDelete: () => void;
 }
 
 export function TaskDetails({
   task,
   onClose,
-  onUpdate,
+  onUpdate: originalOnUpdate,
   onDelete,
 }: TaskDetailsProps) {
+  // Create an adapter function to handle both interface patterns
+  const onUpdate = (taskId: string, updates: Partial<TaskDetailsType>) => {
+    try {
+      // Check if the function expects 2 or 3 parameters
+      if (originalOnUpdate.length === 3) {
+        // If it expects 3, it's using the (sectionId, taskId, updates) pattern
+        // For this case, we'll use task.project.id as the sectionId
+        (
+          originalOnUpdate as (
+            sectionId: string,
+            taskId: string,
+            updates: Partial<TaskDetailsType>
+          ) => void
+        )(task?.project?.id || "", taskId, updates);
+      } else {
+        // Otherwise, it's using the (taskId, updates) pattern
+        (
+          originalOnUpdate as (
+            taskId: string,
+            updates: Partial<TaskDetailsType>
+          ) => void
+        )(taskId, updates);
+      }
+    } catch (error) {
+      console.error("Error in onUpdate adapter:", error);
+      // Fallback to the 2-parameter version
+      (
+        originalOnUpdate as (
+          taskId: string,
+          updates: Partial<TaskDetailsType>
+        ) => void
+      )(taskId, updates);
+    }
+  };
+
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(task?.title || "");
   const [newComment, setNewComment] = useState("");
@@ -75,6 +119,14 @@ export function TaskDetails({
   const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null);
   const [subtaskDescription, setSubtaskDescription] = useState("");
 
+  // Add state for user data
+  const [userMap, setUserMap] = useState<
+    Record<string, { fullName: string; email: string }>
+  >({});
+  const [isLoadingUserData, setIsLoadingUserData] = useState(true);
+  const [projectMembers, setProjectMembers] = useState<any[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
   // Update the subtask creation and editing interfaces to include assignee and due date fields
   const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(
     null
@@ -84,6 +136,186 @@ export function TaskDetails({
     string | null
   >(null);
   const [editedSubtaskDueDate, setEditedSubtaskDueDate] = useState<string>("");
+
+  // Function to load project members
+  useEffect(() => {
+    if (task?.project?.id) {
+      const loadProjectMembers = async () => {
+        setLoadingMembers(true);
+        try {
+          // If the task has a project ID, fetch project members
+          const members = await fetchProjectMembers(task.project.id);
+          if (members) {
+            setProjectMembers(members);
+
+            // Also update userMap with project members
+            const newUserMap: Record<
+              string,
+              { fullName: string; email: string }
+            > = {};
+            members.forEach((member) => {
+              newUserMap[member._id] = {
+                email: member.email || "Unknown",
+                fullName: member.fullName || formatUsername(member.email),
+              };
+            });
+
+            setUserMap((prev) => ({ ...prev, ...newUserMap }));
+          }
+        } catch (error) {
+          console.error("Error loading project members:", error);
+        } finally {
+          setLoadingMembers(false);
+        }
+      };
+
+      loadProjectMembers();
+    }
+  }, [task?.project?.id]);
+
+  // Function to load user data
+  useEffect(() => {
+    if (task) {
+      const loadUserData = async () => {
+        setIsLoadingUserData(true);
+        const newUserMap: Record<string, { fullName: string; email: string }> =
+          {};
+
+        // Collect all user IDs that need to be fetched
+        const userIds = new Set<string>();
+
+        // Add task assignee if it exists and looks like a user ID
+        if (task.assignee && !task.assignee.includes("@")) {
+          userIds.add(task.assignee);
+        }
+
+        // Add subtask assignees
+        task.subtasks.forEach((subtask) => {
+          if (subtask.assignee && !subtask.assignee.includes("@")) {
+            userIds.add(subtask.assignee);
+          }
+        });
+
+        // Add activity users
+        task.activities.forEach((activity) => {
+          if (
+            typeof activity.user === "string" &&
+            !activity.user.includes("@")
+          ) {
+            userIds.add(activity.user);
+          } else if (
+            typeof activity.user === "object" &&
+            activity.user.userId
+          ) {
+            userIds.add(activity.user.userId);
+          }
+        });
+
+        // First check if we already have the user in projectMembers
+        for (const userId of userIds) {
+          // Skip if we already have this user in the map
+          if (userMap[userId]) continue;
+
+          // Check if the user is in projectMembers
+          const memberMatch = projectMembers.find(
+            (member) => member._id === userId
+          );
+          if (memberMatch) {
+            newUserMap[userId] = {
+              email: memberMatch.email || "Unknown",
+              fullName:
+                memberMatch.fullName || formatUsername(memberMatch.email),
+            };
+            continue;
+          }
+
+          // If not in projectMembers, fetch individually
+          try {
+            const userData = await fetchUserById(userId);
+            if (userData) {
+              newUserMap[userId] = {
+                email: userData.email || "Unknown",
+                fullName:
+                  userData.fullName ||
+                  userData.name ||
+                  formatUsername(userData.email),
+              };
+            }
+          } catch (error) {
+            console.error(`Failed to fetch user ${userId}:`, error);
+          }
+        }
+
+        setUserMap((prev) => ({ ...prev, ...newUserMap }));
+        setIsLoadingUserData(false);
+      };
+
+      loadUserData();
+    }
+  }, [task, projectMembers]);
+
+  // Function to format the assignee display name
+  const formatAssigneeName = (assignee: string | null): string => {
+    if (!assignee) return "Unassigned";
+
+    // If we have the user data in our map, always prefer the full name
+    if (userMap[assignee]?.fullName) {
+      return userMap[assignee].fullName;
+    }
+
+    // If it's an email address, format it nicely
+    if (assignee.includes("@")) {
+      return formatUsername(assignee);
+    }
+
+    // Fallback for when we have a user ID but no user data
+    return `User ${assignee.substring(0, 6)}`;
+  };
+
+  // Function to get initials for the avatar
+  const getAssigneeInitials = (assignee: string | null): string => {
+    if (!assignee) return "?";
+    const displayName = formatAssigneeName(assignee);
+    return getInitials(displayName);
+  };
+
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "";
+
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+
+      // Check if it's today
+      const today = new Date();
+      const isToday =
+        date.getDate() === today.getDate() &&
+        date.getMonth() === today.getMonth() &&
+        date.getFullYear() === today.getFullYear();
+
+      if (isToday) {
+        return `Today - ${format(date, "MMM d")}`;
+      }
+
+      // Check if it's tomorrow
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const isTomorrow =
+        date.getDate() === tomorrow.getDate() &&
+        date.getMonth() === tomorrow.getMonth() &&
+        date.getFullYear() === tomorrow.getFullYear();
+
+      if (isTomorrow) {
+        return `Tomorrow - ${format(date, "MMM d")}`;
+      }
+
+      // For other dates, show a more complete format
+      return format(date, "MMM d, yyyy");
+    } catch (e) {
+      return dateString;
+    }
+  };
 
   // Replace the getProjectColor function with this more robust version
   const getProjectColor = (colorClass?: string) => {
@@ -106,8 +338,7 @@ export function TaskDetails({
 
   const handleTitleSave = () => {
     if (editedTitle.trim() === "") return; // Don't save empty titles
-    onUpdate(task.id, {
-      ...task, // Preserve all existing task data
+    onUpdate(task._id, {
       title: editedTitle.trim(),
     });
     setIsEditing(false);
@@ -116,15 +347,17 @@ export function TaskDetails({
   const handleAddComment = () => {
     if (!newComment.trim()) return;
 
+    // Get user ID from task.createdBy or use a generic identifier
+    const userId = task.createdBy || "current-user";
+
     const newActivity: TaskActivity = {
       type: "commented",
-      user: "Ka",
+      user: userId,
       timestamp: "Just now",
       content: newComment,
     };
 
-    onUpdate(task.id, {
-      ...task,
+    onUpdate(task._id, {
       activities: [...task.activities, newActivity],
     });
     setNewComment("");
@@ -144,8 +377,7 @@ export function TaskDetails({
     };
 
     // Update the task with the new subtask while preserving all existing task data
-    onUpdate(task.id, {
-      ...task, // Preserve all existing task data
+    onUpdate(task._id, {
       subtasks: [...task.subtasks, newSubtaskItem],
     });
     setNewSubtask("");
@@ -172,8 +404,7 @@ export function TaskDetails({
       return;
     }
 
-    onUpdate(task.id, {
-      ...task,
+    onUpdate(task._id, {
       subtasks: task.subtasks.map((st) =>
         st.id === editingSubtaskId
           ? {
@@ -189,15 +420,13 @@ export function TaskDetails({
   };
 
   const handleDeleteSubtask = (subtaskId: string) => {
-    onUpdate(task.id, {
-      ...task,
+    onUpdate(task._id, {
       subtasks: task.subtasks.filter((st) => st.id !== subtaskId),
     });
   };
 
   const handleToggleSubtask = (subtaskId: string) => {
-    onUpdate(task.id, {
-      ...task,
+    onUpdate(task._id, {
       subtasks: task.subtasks.map((st) =>
         st.id === subtaskId ? { ...st, completed: !st.completed } : st
       ),
@@ -219,8 +448,7 @@ export function TaskDetails({
     newSubtasks.splice(destination.index, 0, removed);
 
     // Update the task with the new subtasks order
-    onUpdate(task.id, {
-      ...task,
+    onUpdate(task._id, {
       subtasks: newSubtasks,
     });
   };
@@ -235,8 +463,7 @@ export function TaskDetails({
   const handleUpdateSubtaskDetails = () => {
     if (!selectedSubtask) return;
 
-    onUpdate(task.id, {
-      ...task,
+    onUpdate(task._id, {
       subtasks: task.subtasks.map((st) =>
         st.id === selectedSubtask.id
           ? {
@@ -246,22 +473,6 @@ export function TaskDetails({
           : st
       ),
     });
-  };
-
-  // Format date for display
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "";
-
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return dateString;
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-    } catch (e) {
-      return dateString;
-    }
   };
 
   // Custom styles for the date input with more direct styling
@@ -292,11 +503,11 @@ export function TaskDetails({
         <SheetContent
           side="right"
           style={{ width: "800px", maxWidth: "90vw" }}
-          className="bg-[#1a1a1a] border-l border-[#222] p-0 overflow-hidden"
+          className="bg-[#1a1a1a] border-l border-[#353535] p-0 overflow-hidden"
         >
           <div className="flex flex-col h-full">
             {/* Header */}
-            <SheetHeader className="py-2 px-4 flex items-center justify-between border-b border-[#222]">
+            <SheetHeader className="py-2 px-4 flex items-center justify-between border-b border-[#353535]">
               <div className="sr-only">
                 <SheetTitle>{task.title}</SheetTitle>
               </div>
@@ -306,11 +517,43 @@ export function TaskDetails({
                   size="sm"
                   className="text-neutral-200 border-neutral-700 hover:bg-neutral-800 hover:text-neutral-100 h-8"
                   onClick={() => {
-                    onUpdate(task.id, {
-                      ...task,
-                      completed: !task.completed,
-                      status: !task.completed ? "completed" : "not started",
-                    });
+                    if (!task) return;
+
+                    // Get current timestamp
+                    const now = new Date();
+                    const newStatus = !task.completed
+                      ? "completed"
+                      : "not started";
+
+                    // Determine user ID for the update - use a valid existing ID from the task
+                    const userId = task.createdBy || task.assignee;
+
+                    try {
+                      // Create a clean and complete update object with all necessary fields
+                      const updates: Partial<TaskDetailsType> = {
+                        completed: !task.completed,
+                        status: newStatus,
+                        completedAt: !task.completed
+                          ? now.toISOString()
+                          : undefined,
+                        // Include IDs to ensure proper handling
+                        _id: task._id,
+                        id: task.id,
+                        // Make sure to use a valid user ID for updatedBy
+                        updatedBy: userId || "current-user",
+                        // Add a name for the updater
+                        updatedByName: userId
+                          ? formatAssigneeName(userId)
+                          : "User",
+                      };
+
+                      console.log("Sending task update with payload:", updates);
+
+                      // Use our adapter function to handle the update
+                      onUpdate(task._id, updates);
+                    } catch (error) {
+                      console.error("Error updating task status:", error);
+                    }
                   }}
                 >
                   <Check className="h-4 w-4 mr-2" />
@@ -341,7 +584,7 @@ export function TaskDetails({
                     <Input
                       value={editedTitle}
                       onChange={(e) => setEditedTitle(e.target.value)}
-                      className="bg-[#222] border-0 text-2xl font-semibold text-white focus-visible:ring-1 focus-visible:ring-neutral-500"
+                      className="bg-[#353535] border-0 text-2xl font-semibold text-white focus-visible:ring-1 focus-visible:ring-neutral-500"
                       autoFocus
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -390,17 +633,13 @@ export function TaskDetails({
                   <label className="text-sm text-neutral-400">Assignee</label>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2">
-                      <Avatar className="h-6 w-6 bg-amber-500">
+                      <Avatar className="h-6 w-6 bg-blue-600">
                         <AvatarFallback className="text-xs">
-                          {task.assignee && task.assignee !== ""
-                            ? task.assignee.substring(0, 2)
-                            : "Ka"}
+                          {getAssigneeInitials(task.assignee)}
                         </AvatarFallback>
                       </Avatar>
                       <span className="text-neutral-200">
-                        {task.assignee && task.assignee !== ""
-                          ? task.assignee
-                          : "Kaizen"}
+                        {formatAssigneeName(task.assignee)}
                       </span>
                     </div>
                     <Button
@@ -431,7 +670,9 @@ export function TaskDetails({
                         </AvatarFallback>
                       </Avatar>
                       <span className="text-neutral-200">
-                        {task.dueDate || "Today - Mar 18"}
+                        {task.dueDate
+                          ? formatDate(task.dueDate)
+                          : "No due date"}
                       </span>
                     </div>
                     <Button
@@ -560,7 +801,7 @@ export function TaskDetails({
                     className="bg-[#353535] border-0 resize-none min-h-[120px] text-neutral-200 text-base"
                     value={task.description || ""}
                     onChange={(e) =>
-                      onUpdate(task.id, {
+                      onUpdate(task._id, {
                         ...task,
                         description: e.target.value,
                       })
@@ -647,15 +888,33 @@ export function TaskDetails({
                                               />
                                             </SelectTrigger>
                                             <SelectContent className="bg-[#353535] border-[#1a1a1a] text-white">
-                                              <SelectItem value="CX">
-                                                CX
-                                              </SelectItem>
-                                              <SelectItem value="JD">
-                                                JD
-                                              </SelectItem>
-                                              <SelectItem value="UNASSIGNED">
-                                                Unassigned
-                                              </SelectItem>
+                                              {loadingMembers ? (
+                                                <SelectItem
+                                                  value="loading"
+                                                  disabled
+                                                >
+                                                  Loading members...
+                                                </SelectItem>
+                                              ) : (
+                                                <>
+                                                  {projectMembers.map(
+                                                    (member) => (
+                                                      <SelectItem
+                                                        key={member._id}
+                                                        value={member._id}
+                                                      >
+                                                        {member.fullName ||
+                                                          formatUsername(
+                                                            member.email
+                                                          )}
+                                                      </SelectItem>
+                                                    )
+                                                  )}
+                                                  <SelectItem value="UNASSIGNED">
+                                                    Unassigned
+                                                  </SelectItem>
+                                                </>
+                                              )}
                                             </SelectContent>
                                           </Select>
 
@@ -731,8 +990,12 @@ export function TaskDetails({
                                             {subtask.title}
                                           </span>
                                           {subtask.assignee && (
-                                            <div className="h-5 w-5 rounded-full bg-violet-500 flex items-center justify-center text-white text-xs">
-                                              {subtask.assignee}
+                                            <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs">
+                                              {getInitials(
+                                                formatAssigneeName(
+                                                  subtask.assignee
+                                                )
+                                              )}
                                             </div>
                                           )}
                                           {subtask.dueDate && (
@@ -825,11 +1088,26 @@ export function TaskDetails({
                               />
                             </SelectTrigger>
                             <SelectContent className="bg-[#353535] border-[#1a1a1a] text-white">
-                              <SelectItem value="CX">CX</SelectItem>
-                              <SelectItem value="JD">JD</SelectItem>
-                              <SelectItem value="UNASSIGNED">
-                                Unassigned
-                              </SelectItem>
+                              {loadingMembers ? (
+                                <SelectItem value="loading" disabled>
+                                  Loading members...
+                                </SelectItem>
+                              ) : (
+                                <>
+                                  {projectMembers.map((member) => (
+                                    <SelectItem
+                                      key={member._id}
+                                      value={member._id}
+                                    >
+                                      {member.fullName ||
+                                        formatUsername(member.email)}
+                                    </SelectItem>
+                                  ))}
+                                  <SelectItem value="UNASSIGNED">
+                                    Unassigned
+                                  </SelectItem>
+                                </>
+                              )}
                             </SelectContent>
                           </Select>
 
@@ -938,22 +1216,36 @@ export function TaskDetails({
                     )
                     .map((activity, index) => (
                       <div key={index} className="flex items-start gap-3 group">
-                        <Avatar className="h-6 w-6 bg-amber-500">
+                        <Avatar className="h-6 w-6 bg-blue-600">
                           <AvatarFallback className="text-xs">
-                            Ka
+                            {typeof activity.user === "string"
+                              ? getAssigneeInitials(activity.user)
+                              : getInitials(
+                                  activity.user.name ||
+                                    activity.user.userId ||
+                                    "?"
+                                )}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-neutral-200">
-                              Kaizen
+                              {typeof activity.user === "string"
+                                ? formatAssigneeName(activity.user)
+                                : activity.user.name
+                                ? activity.user.name.includes("@")
+                                  ? formatUsername(activity.user.name)
+                                  : activity.user.name
+                                : formatAssigneeName(activity.user.userId)}
                             </span>
                             <span className="text-xs text-neutral-500">
                               {activity.type === "commented"
                                 ? "commented"
                                 : activity.type === "created"
                                 ? "created this task"
-                                : "completed this task"}
+                                : activity.type === "completed"
+                                ? "completed this task"
+                                : "updated this task"}
                             </span>
                             <span className="text-xs text-neutral-500">
                               {activity.timestamp}
@@ -978,15 +1270,17 @@ export function TaskDetails({
                     ))}
 
                   <div className="flex items-start gap-3 pt-2">
-                    <Avatar className="h-8 w-8 bg-amber-500">
-                      <AvatarFallback className="text-sm">Ka</AvatarFallback>
+                    <Avatar className="h-8 w-8 bg-blue-600">
+                      <AvatarFallback className="text-sm">
+                        {getInitials(formatUsername(task.createdBy || "User"))}
+                      </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <Textarea
                         placeholder="Add a comment..."
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
-                        className="bg-[#222] border-0 resize-none min-h-[100px] text-white rounded-lg placeholder:text-neutral-500"
+                        className="bg-[#353535] border-0 resize-none min-h-[100px] text-white rounded-lg placeholder:text-neutral-500"
                       />
                       {newComment && (
                         <div className="mt-2 flex justify-end">
@@ -1002,14 +1296,14 @@ export function TaskDetails({
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-[#222] flex items-center justify-between bg-[#1a1a1a]">
+            <div className="p-4 border-t border-[#353535] flex items-center justify-between bg-[#121212]">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-neutral-400">Collaborators</span>
                 <div className="flex -space-x-2">
-                  <Avatar className="h-6 w-6 border-2 border-[#1a1a1a] bg-amber-500">
+                  <Avatar className="h-6 w-6 border-2 border-[#1E201E] bg-blue-600">
                     <AvatarFallback className="text-xs">Ka</AvatarFallback>
                   </Avatar>
-                  <Avatar className="h-6 w-6 border-2 border-[#1a1a1a] bg-neutral-700">
+                  <Avatar className="h-6 w-6 border-2 border-[#1E201E] bg-neutral-700">
                     <AvatarFallback className="text-xs">
                       <Plus className="h-3 w-3" />
                     </AvatarFallback>
@@ -1036,12 +1330,12 @@ export function TaskDetails({
         <SheetContent
           side="right"
           style={{ width: "800px", maxWidth: "90vw" }}
-          className="bg-[#1a1a1a] border-l border-[#222] p-0 overflow-hidden"
+          className="bg-[#1a1a1a] border-l border-[#353535] p-0 overflow-hidden"
         >
           {selectedSubtask && (
             <div className="flex flex-col h-full">
               {/* Header */}
-              <SheetHeader className="py-2 px-4 flex items-center justify-between border-b border-[#222]">
+              <SheetHeader className="py-2 px-4 flex items-center justify-between border-b border-[#353535]">
                 <div className="flex items-center">
                   <Button
                     variant="ghost"
@@ -1078,7 +1372,7 @@ export function TaskDetails({
                       const now = new Date();
 
                       // Update the task with the new subtasks array and possibly update the task status
-                      onUpdate(task.id, {
+                      onUpdate(task._id, {
                         ...task,
                         subtasks: updatedSubtasks,
                         // If all subtasks are completed, mark the parent task as completed too
@@ -1137,19 +1431,13 @@ export function TaskDetails({
                     <label className="text-sm text-neutral-400">Assignee</label>
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-2">
-                        <Avatar className="h-6 w-6 bg-amber-500">
+                        <Avatar className="h-6 w-6 bg-blue-600">
                           <AvatarFallback className="text-xs">
-                            {selectedSubtask.assignee &&
-                            selectedSubtask.assignee !== ""
-                              ? selectedSubtask.assignee.substring(0, 2)
-                              : "Ka"}
+                            {getAssigneeInitials(selectedSubtask.assignee)}
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-neutral-200">
-                          {selectedSubtask.assignee &&
-                          selectedSubtask.assignee !== ""
-                            ? selectedSubtask.assignee
-                            : "Kaizen"}
+                          {formatAssigneeName(selectedSubtask.assignee)}
                         </span>
                       </div>
                       <Button
@@ -1241,19 +1529,23 @@ export function TaskDetails({
               </div>
 
               {/* Footer */}
-              <div className="p-4 border-t border-[#222] flex items-center justify-between bg-[#1a1a1a]">
+              <div className="p-4 border-t border-[#353535] flex items-center justify-between bg-[#121212]">
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-neutral-400">
                     Collaborators
                   </span>
                   <div className="flex -space-x-2">
-                    <Avatar className="h-6 w-6 border-2 border-[#1a1a1a] bg-amber-500">
-                      <AvatarFallback className="text-xs">Ka</AvatarFallback>
+                    <Avatar className="h-6 w-6 border-2 border-[#121212] bg-blue-600">
+                      <AvatarFallback className="text-xs">
+                        {task.createdBy
+                          ? getAssigneeInitials(task.createdBy)
+                          : getInitials("User")}
+                      </AvatarFallback>
                     </Avatar>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 rounded-full bg-neutral-700 border-2 border-[#1a1a1a] text-white"
+                      className="h-6 w-6 rounded-full bg-neutral-700 border-2 border-[#121212] text-white"
                     >
                       <Plus className="h-3 w-3" />
                     </Button>

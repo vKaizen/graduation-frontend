@@ -48,8 +48,10 @@ import { format } from "date-fns";
 import { SortConfig } from "./sort-menu";
 import { fetchProjectMembers } from "@/api-service";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
 import { MuiDatePickerComponent } from "@/components/ui/mui-date-picker";
+import { getInitials } from "@/lib/user-utils";
+import { getAuthCookie } from "@/lib/cookies";
+import { jwtDecode } from "jwt-decode";
 
 interface ListViewProps {
   project: Project;
@@ -225,8 +227,36 @@ export function ListView({
     }
 
     if (taskSectionId && foundTask) {
-      // Get current user information from localStorage
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      // Get current user information from localStorage or JWT token
+      let userId = null;
+      let userName = null;
+
+      try {
+        // First try to get from localStorage
+        const user = JSON.parse(localStorage.getItem("user") || "{}");
+        userId = user.userId || user._id;
+        userName = user.fullName || user.email || "Unknown User";
+
+        // If no user in localStorage, try to get from JWT token
+        if (!userId) {
+          const token = getAuthCookie();
+          if (token) {
+            const decoded: {
+              sub?: string;
+              userId?: string;
+              fullName?: string;
+              email?: string;
+            } = jwtDecode(token);
+            userId = decoded.sub || decoded.userId;
+            userName = decoded.fullName || decoded.email || "User";
+          }
+        }
+      } catch (error) {
+        console.error("Error getting user info:", error);
+        // Fallback to using task info
+        userId = foundTask.createdBy || foundTask.assignee || "current-user";
+        userName = "Current User";
+      }
 
       // Extract only the properties that exist in the Task type
       const taskUpdates: Partial<Task> = {
@@ -237,15 +267,21 @@ export function ListView({
         description: updates.description,
         subtasks: updates.subtasks,
         status: updates.status,
+        completed: updates.status === "completed",
+        completedAt:
+          updates.status === "completed" ? new Date().toISOString() : undefined,
         // Add updater information
-        updatedBy: user.userId || user._id,
-        updatedByName: user.fullName || user.email || "Unknown User",
+        updatedBy: userId || "current-user",
+        updatedByName: userName || "Unknown User",
       };
 
       console.log("List view updating task with user info:", taskUpdates);
 
       // Update the task in the project
       updateTask(taskSectionId, taskId, taskUpdates);
+
+      // Exit edit mode after updating
+      setEditingTask(null);
     }
 
     // Update the selected task in the UI
@@ -378,24 +414,37 @@ export function ListView({
     const section = project.sections.find((s) => s._id === sectionId);
     const sectionName = section ? section.title : "Unknown Section";
 
+    // Get the actual user info for the creator if possible
+    const creatorId = task.createdBy || "";
+    const creator = projectMembers.find((member) => member._id === creatorId);
+    const creatorName = creator ? creator.fullName || creator.email : "User";
+
+    // Get the actual user info for the updater if possible
+    const updaterId = task.updatedBy || "";
+    const updater = projectMembers.find((member) => member._id === updaterId);
+    const updaterName = updater ? updater.fullName || updater.email : "User";
+
     const taskDetails: TaskDetailsType = {
       ...task,
       description: task.description || "",
       activities: [
         {
           type: "created",
-          user: "Ka",
+          user: creatorId || "User",
           timestamp: "Yesterday at 1:28am",
+          content: `Task created by ${creatorName}`,
         },
         {
           type: "updated",
-          user: "Ka",
+          user: updaterId || "User",
           timestamp: "Yesterday at 6:29am",
-          content: "Changed priority to " + (task.priority || "None"),
+          content: `${updaterName} changed priority to ${
+            task.priority || "None"
+          }`,
         },
       ],
       subtasks: task.subtasks || [],
-      collaborators: ["Ka", "JD"],
+      collaborators: ["User"],
       project: {
         id: project._id,
         name: project.name,
@@ -519,6 +568,14 @@ export function ListView({
     });
   }, [project.sections, activeSort]);
 
+  const getAssigneeName = (assigneeId: string | null): string => {
+    if (!assigneeId) return "Unassigned";
+
+    // Find the member with this ID
+    const member = projectMembers.find((member) => member._id === assigneeId);
+    return member ? member.fullName || member.email : assigneeId;
+  };
+
   const renderTaskRow = (
     task: Task,
     section: Project["sections"][0],
@@ -618,7 +675,7 @@ export function ListView({
               date={
                 newTaskData[section._id]?.dueDate
                   ? new Date(newTaskData[section._id].dueDate)
-                  : undefined
+                  : null
               }
               onDateChange={(date) =>
                 setNewTaskData((prev) => ({
@@ -629,7 +686,6 @@ export function ListView({
                   },
                 }))
               }
-              placeholder="Due date"
               className="h-9"
             />
           </td>
@@ -660,7 +716,7 @@ export function ListView({
               <Button
                 size="sm"
                 className="h-9 px-3 bg-[#454545] text-white hover:bg-[#555555]"
-                onClick={() =>
+                onClick={() => {
                   handleUpdateTask(task._id, {
                     title: newTaskData[section._id]?.title || "",
                     assignee: newTaskData[section._id]?.assignee || null,
@@ -669,8 +725,11 @@ export function ListView({
                     description: newTaskData[section._id]?.description || "",
                     subtasks: newTaskData[section._id]?.subtasks || [],
                     status: newTaskData[section._id]?.status || "not started",
-                  })
-                }
+                  });
+                  // This is redundant since handleUpdateTask now sets editingTask to null,
+                  // but adding it here for clarity and as a safeguard
+                  setEditingTask(null);
+                }}
               >
                 Save
               </Button>
@@ -737,8 +796,8 @@ export function ListView({
           <div className="flex items-center gap-3">
             {task.assignee && task.assignee !== "" ? (
               <Avatar className="h-5 w-5">
-                <AvatarFallback className="text-xs bg-rose-400 text-white">
-                  {task.assignee.substring(0, 2)}
+                <AvatarFallback className="text-xs bg-violet-700 text-white">
+                  {getInitials(getAssigneeName(task.assignee))}
                 </AvatarFallback>
               </Avatar>
             ) : (
@@ -746,7 +805,7 @@ export function ListView({
             )}
             <span className="text-sm text-neutral-400 group-hover:text-neutral-300">
               {task.assignee && task.assignee !== ""
-                ? task.assignee
+                ? getAssigneeName(task.assignee)
                 : "Unassigned"}
             </span>
           </div>

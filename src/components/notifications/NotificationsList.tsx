@@ -193,7 +193,7 @@ export default function NotificationsList() {
           Refresh
         </Button>
       </div>
-      <div className="max-h-[400px] overflow-y-auto">
+      <div className="max-h-[400px] overflow-y-auto notification-container">
         {notifications.map((notification) => (
           <NotificationItem
             key={notification.id}

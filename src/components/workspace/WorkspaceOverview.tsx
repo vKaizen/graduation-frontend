@@ -2,24 +2,37 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Plus, List } from "lucide-react";
+import { ChevronDown, Plus, List, UserPlus } from "lucide-react";
 import Link from "next/link";
-import { fetchWorkspaceMembers, fetchProjectsByWorkspace } from "@/api-service";
+import {
+  fetchWorkspaceMembers,
+  fetchProjectsByWorkspace,
+  fetchProjectMembers,
+} from "@/api-service";
 import type { Workspace, User, Project } from "@/types";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MemberInviteModal } from "./MemberInviteModal";
 import { TestDialog } from "./TestDialog";
 import { TestButton } from "./TestButton";
+import { ProjectJoinDialog } from "./ProjectJoinDialog";
+import { getUserIdCookie } from "@/lib/cookies";
 
 interface WorkspaceOverviewProps {
   workspace: Workspace;
 }
 
+interface ProjectWithMembership extends Project {
+  isMember: boolean;
+}
+
 export function WorkspaceOverview({ workspace }: WorkspaceOverviewProps) {
   const [members, setMembers] = useState<User[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectWithMembership[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [selectedProject, setSelectedProject] =
+    useState<ProjectWithMembership | null>(null);
+  const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
 
   const loadData = async () => {
     try {
@@ -33,9 +46,73 @@ export function WorkspaceOverview({ workspace }: WorkspaceOverviewProps) {
       ]);
 
       setMembers(membersData);
-      setProjects(projectsData);
+
+      // Get current user ID
+      const userId = getUserIdCookie();
+      console.log("Current user ID:", userId);
+
+      // Default to showing join buttons by marking isMember as false for all projects
+      const projectsWithMembership: ProjectWithMembership[] = projectsData.map(
+        (project) => ({
+          ...project,
+          isMember: false, // Default to not a member to ensure join button appears
+        })
+      );
+
+      // Only if we have a userId, attempt to check membership
+      if (userId) {
+        try {
+          // Check membership for each project
+          for (let i = 0; i < projectsWithMembership.length; i++) {
+            const project = projectsWithMembership[i];
+            try {
+              // Fetch project members
+              const projectMembers = await fetchProjectMembers(project._id);
+              console.log(`Project "${project.name}" members:`, projectMembers);
+
+              // Check if current user is a member
+              const isMember = projectMembers.some(
+                (member) => member._id === userId
+              );
+
+              console.log(`User is member of "${project.name}": ${isMember}`);
+
+              // Update membership status
+              projectsWithMembership[i] = {
+                ...project,
+                isMember,
+              };
+            } catch (error) {
+              console.error(
+                `Error checking membership for project ${project.name}:`,
+                error
+              );
+              // Keep default isMember: false
+            }
+          }
+        } catch (error) {
+          console.error("Error checking project memberships:", error);
+        }
+      } else {
+        console.warn("No user ID found, showing join buttons for all projects");
+      }
+
+      console.log("Projects with membership:", projectsWithMembership);
+      setProjects(projectsWithMembership);
     } catch (error) {
       console.error("Failed to load workspace data:", error);
+
+      // Handle the error by showing all projects without membership
+      try {
+        const projectsData = await fetchProjectsByWorkspace(workspace._id);
+        const projectsWithoutMembership = projectsData.map((project) => ({
+          ...project,
+          isMember: false, // Default all to not members when error occurs
+        }));
+        setProjects(projectsWithoutMembership);
+      } catch (fallbackError) {
+        console.error("Failed to load projects in fallback:", fallbackError);
+      }
     } finally {
       setIsLoadingMembers(false);
       setIsLoadingProjects(false);
@@ -45,6 +122,69 @@ export function WorkspaceOverview({ workspace }: WorkspaceOverviewProps) {
   useEffect(() => {
     loadData();
   }, [workspace._id]);
+
+  const handleJoinClick = (
+    project: ProjectWithMembership,
+    e: React.MouseEvent
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedProject(project);
+    setIsJoinDialogOpen(true);
+  };
+
+  const handleJoinSuccess = () => {
+    loadData(); // Refresh the data after joining
+  };
+
+  // Function to render project card
+  const renderProjectCard = (project: ProjectWithMembership) => {
+    const showJoinButton = !project.isMember;
+
+    return (
+      <div
+        key={project._id}
+        className="p-4 rounded-lg bg-[#353535] hover:bg-[#1a1a1a] transition-colors"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <div
+              className="h-8 w-8 rounded-md mr-3 flex items-center justify-center"
+              style={{
+                backgroundColor: project.color || "#6366f1",
+              }}
+            >
+              <List className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-medium">{project.name}</h3>
+              <p className="text-sm text-neutral-400">
+                {project.description || "No description"}
+              </p>
+            </div>
+          </div>
+
+          {showJoinButton ? (
+            <Button
+              onClick={(e) => handleJoinClick(project, e)}
+              size="sm"
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <UserPlus className="h-4 w-4 mr-1.5" />
+              Join
+            </Button>
+          ) : (
+            <Link
+              href={`/projects/${project._id}/board`}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded"
+            >
+              View Project
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="px-6 py-8">
@@ -86,30 +226,9 @@ export function WorkspaceOverview({ workspace }: WorkspaceOverviewProps) {
               </div>
             ) : (
               <div className="space-y-3">
-                {projects.slice(0, 3).map((project) => (
-                  <Link
-                    key={project._id}
-                    href={`/projects/${project._id}/board`}
-                    className="block p-4 rounded-lg bg-[#353535] hover:bg-[#1a1a1a] transition-colors"
-                  >
-                    <div className="flex items-center">
-                      <div
-                        className="h-8 w-8 rounded-md mr-3 flex items-center justify-center"
-                        style={{ backgroundColor: project.color || "#6366f1" }}
-                      >
-                        <List className="h-4 w-4 text-white" />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-medium">
-                          {project.name}
-                        </h3>
-                        <p className="text-sm text-neutral-400">
-                          {project.description || "No description"}
-                        </p>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                {projects
+                  .slice(0, 3)
+                  .map((project) => renderProjectCard(project))}
               </div>
             )}
           </div>
@@ -192,6 +311,17 @@ export function WorkspaceOverview({ workspace }: WorkspaceOverviewProps) {
           </div>
         </div>
       </div>
+
+      {/* Join Project Dialog */}
+      {selectedProject && (
+        <ProjectJoinDialog
+          projectId={selectedProject._id}
+          projectName={selectedProject.name}
+          isOpen={isJoinDialogOpen}
+          onClose={() => setIsJoinDialogOpen(false)}
+          onSuccess={handleJoinSuccess}
+        />
+      )}
     </div>
   );
 }

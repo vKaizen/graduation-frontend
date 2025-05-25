@@ -1,4 +1,5 @@
 /* Force Tailwind rebuild */
+@import '../styles/scrollbar-hide.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -184,4 +185,47 @@ body {
 .react-flow__minimap {
   background-color: #1a1a1a;
   border: 1px solid #353535;
+}
+
+/* Global Custom Scrollbar Styles */
+/* Main pages scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #353535;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #454545;
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #353535 #1a1a1a;
+}
+
+/* Modal-specific scrollbar styles */
+.modal-container::-webkit-scrollbar,
+.dialog-content::-webkit-scrollbar,
+.dropdown-content::-webkit-scrollbar,
+.notification-container::-webkit-scrollbar {
+  display: none;
+}
+
+.modal-container,
+.dialog-content,
+.dropdown-content,
+.notification-container {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }

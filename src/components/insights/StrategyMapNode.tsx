@@ -288,7 +288,7 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
       />
 
       <div
-        className="bg-[#1a1a1a] border border-[#333333] hover:border-[#4573D2] rounded-lg p-4 w-[280px] h-[180px] flex flex-col relative cursor-pointer shadow-md hover:shadow-lg transition-all duration-200"
+        className="bg-[#1a1a1a] border border-[#333333] hover:border-[#939090] rounded-lg p-4 w-[280px] h-[180px] flex flex-col relative cursor-pointer shadow-md hover:shadow-lg transition-all duration-200"
         onClick={handleNodeClick}
       >
         {/* Goal indicator and progress */}
@@ -352,7 +352,7 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
           {/* Owner */}
           <div className="flex items-center space-x-1">
             <Avatar className="h-5 w-5 bg-[#4573D2]">
-              <span className="text-[10px] font-medium text-white">
+              <span className="text-[10px] font-medium text-white flex items-center justify-center h-full w-full">
                 {data.ownerName ? data.ownerName.charAt(0) : "U"}
               </span>
             </Avatar>

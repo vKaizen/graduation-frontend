@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import {
 } from "@/api-service";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useAuth } from "@/contexts/AuthContext";
+import { getIsLoggingOut } from "@/contexts/AuthContext";
 
 const scrollbarHideClass = `
   scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]
@@ -66,14 +67,27 @@ function EmptyProjectsState() {
 export function AppSidebar() {
   const pathname = usePathname();
   const [projects, setProjects] = useState<
-    { id: string; name: string; color: string }[]
+    { id: string; name: string; color: string; workspaceId: string }[]
   >([]);
   const [loading, setLoading] = useState(true);
   const { currentWorkspace, setCurrentWorkspace, workspaces } = useWorkspace();
   const { authState } = useAuth();
 
-  // Add new useEffect to detect workspace change from URL
+  // Use a ref to track the current workspace ID for fetch operations
+  const currentWorkspaceIdRef = useRef<string | null>(null);
+
+  // Update ref when workspace changes
   useEffect(() => {
+    currentWorkspaceIdRef.current = currentWorkspace?._id || null;
+  }, [currentWorkspace]);
+
+  // Handle workspace changes from URL
+  useEffect(() => {
+    // Skip if we're in the process of logging out
+    if (getIsLoggingOut()) {
+      return;
+    }
+
     if (pathname && pathname.includes("/workspaces/")) {
       // Extract workspace ID from pathname
       const match = pathname.match(/\/workspaces\/([^\/]+)/);
@@ -92,53 +106,93 @@ export function AppSidebar() {
           console.log(
             `Switching to workspace from URL: ${workspaceFromUrl.name}`
           );
+          // Clear projects before switching workspace to prevent showing projects from previous workspace
+          setProjects([]);
           setCurrentWorkspace(workspaceFromUrl);
         }
       }
     }
   }, [pathname, workspaces, currentWorkspace, setCurrentWorkspace]);
 
+  // Load projects when workspace changes
   useEffect(() => {
     const loadProjects = async () => {
+      // Skip if we're in the process of logging out
+      if (getIsLoggingOut()) {
+        setLoading(false);
+        return;
+      }
+
+      // Clear projects when workspace changes
+      setProjects([]);
+      setLoading(true);
+
       if (!currentWorkspace || !currentWorkspace._id) {
         console.log("No current workspace or workspace ID");
-        setProjects([]);
+        setLoading(false);
+        return;
+      }
+
+      // Store the current workspace ID for this fetch operation
+      const fetchWorkspaceId = currentWorkspace._id;
+
+      // Skip if user is not authenticated
+      if (!authState.userId || !authState.accessToken) {
+        console.log("User is not authenticated, skipping project loading");
         setLoading(false);
         return;
       }
 
       try {
-        setLoading(true);
         console.log(
           "AppSidebar: Starting to load projects for workspace",
-          currentWorkspace._id
+          fetchWorkspaceId
         );
 
         // Fetch projects filtered by the current workspace
-        // Note: The backend API returns all accessible projects (including public ones)
         const workspaceProjects = await fetchProjectsByWorkspace(
-          currentWorkspace._id
+          fetchWorkspaceId
         );
 
-        console.log(
-          "AppSidebar: Received workspace projects:",
-          workspaceProjects
-        );
-
-        // Get current user ID from auth context
-        const userId = authState.userId;
-        console.log("Current user ID from auth context:", userId);
-
-        if (!userId) {
-          console.error("No user ID found in auth context");
-          setProjects([]);
+        // Check if we're logging out or workspace changed during fetch
+        if (
+          getIsLoggingOut() ||
+          currentWorkspaceIdRef.current !== fetchWorkspaceId
+        ) {
+          console.log(
+            "Workspace changed during fetch or logging out, discarding results",
+            { current: currentWorkspaceIdRef.current, fetch: fetchWorkspaceId }
+          );
           setLoading(false);
           return;
         }
 
-        // Filter to only include projects where the user is explicitly a member
+        console.log(
+          "AppSidebar: Received workspace projects:",
+          workspaceProjects?.length || 0
+        );
+
+        // Get current user ID from auth context
+        const userId = authState.userId;
+
+        if (!userId) {
+          console.error("No user ID found in auth context");
+          setLoading(false);
+          return;
+        }
+
+        // Filter to only include projects for the correct workspace and where user is a member
         const userProjects = (workspaceProjects || [])
           .filter((project) => {
+            // Ensure project belongs to the current workspace
+            if (project.workspaceId !== fetchWorkspaceId) {
+              console.warn(
+                `Project ${project._id} belongs to workspace ${project.workspaceId}, not current workspace ${fetchWorkspaceId}`
+              );
+              return false;
+            }
+
+            // Ensure project has roles
             if (!project || !project.roles || !Array.isArray(project.roles)) {
               return false;
             }
@@ -152,31 +206,49 @@ export function AppSidebar() {
               return roleUserId === userId;
             });
 
-            console.log(
-              `Project ${project.name} (${project._id}) - User is member: ${isMember}`
-            );
-
-            // Only show projects where user is an actual member
             return isMember;
           })
           .map((project) => ({
             id: project._id,
             name: project.name || "Untitled Project",
-            color: project.color || "#6366f1", // Default to indigo if no color
+            color: project.color || "#6366f1",
+            workspaceId: project.workspaceId, // Store workspaceId for verification
           }));
 
-        console.log("AppSidebar: User's projects:", userProjects);
+        // Final check to ensure workspace hasn't changed
+        if (currentWorkspaceIdRef.current !== fetchWorkspaceId) {
+          console.warn(
+            "Workspace changed during processing, discarding results"
+          );
+          setLoading(false);
+          return;
+        }
+
+        console.log(
+          `AppSidebar: Found ${userProjects.length} projects for workspace ${fetchWorkspaceId}`
+        );
         setProjects(userProjects);
       } catch (error) {
         console.error("Unexpected error in loadProjects:", error);
-        setProjects([]);
+        // Only clear projects if we're still on the same workspace
+        if (currentWorkspaceIdRef.current === fetchWorkspaceId) {
+          setProjects([]);
+        }
       } finally {
-        setLoading(false);
+        // Only update loading state if we're still on the same workspace
+        if (currentWorkspaceIdRef.current === fetchWorkspaceId) {
+          setLoading(false);
+        }
       }
     };
 
     loadProjects();
-  }, [currentWorkspace, authState.userId, pathname]);
+  }, [currentWorkspace?._id, authState.userId, authState.accessToken]);
+
+  // Filter projects to only show those from the current workspace
+  const filteredProjects = projects.filter(
+    (project) => project.workspaceId === currentWorkspace?._id
+  );
 
   return (
     <aside
@@ -245,11 +317,11 @@ export function AppSidebar() {
             <div className="text-gray-400 text-sm px-5">
               Loading projects...
             </div>
-          ) : projects.length === 0 ? (
+          ) : filteredProjects.length === 0 ? (
             <EmptyProjectsState />
           ) : (
             <div className="space-y-1 px-2">
-              {projects.map((project) => (
+              {filteredProjects.map((project) => (
                 <Link
                   key={project.id}
                   href={`/projects/${project.id}/board`}

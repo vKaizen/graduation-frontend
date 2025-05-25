@@ -21,6 +21,7 @@ import type {
 import { type DashboardCard } from "./contexts/DashboardContext";
 import { getAuthCookie } from "./lib/cookies";
 import { jwtDecode } from "jwt-decode";
+import { getIsLoggingOut } from "./contexts/AuthContext";
 
 // Make sure the API base URL is correct
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
@@ -28,6 +29,14 @@ console.log("API base URL:", API_BASE_URL);
 
 // Helper function to get auth headers
 const getAuthHeaders = (): HeadersInit => {
+  // If we're in the process of logging out, don't include auth token
+  if (getIsLoggingOut()) {
+    console.log("Currently logging out, skipping auth token");
+    return {
+      "Content-Type": "application/json",
+    };
+  }
+
   const token = getAuthCookie();
   if (!token) {
     console.warn("No auth token found in cookies");
@@ -138,6 +147,17 @@ export const fetchUsers = async (): Promise<any[]> => {
 
 export const fetchUserById = async (userId: string): Promise<any> => {
   console.log("🔍 API: fetchUserById called with ID:", userId);
+
+  // If we're logging out, return a default user object instead of making an API call
+  if (getIsLoggingOut()) {
+    console.log("🔍 API: Skipping user fetch during logout");
+    return {
+      fullName: "User",
+      email: "user@example.com",
+      id: userId,
+    };
+  }
+
   try {
     console.log(`Fetching user by ID: ${userId}`);
 
@@ -688,6 +708,25 @@ export const updateTask = async (
     );
   }
 
+  // Ensure we have an updatedBy field to prevent backend errors
+  if (!updates.updatedBy) {
+    console.log("📤 [API] Adding missing updatedBy field with fallback value");
+    try {
+      // Use the same getAuthCookie function that's used elsewhere in the code
+      const token = getAuthCookie();
+      if (token) {
+        // Try to extract user ID from the token payload
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        updates.updatedBy = payload.sub || payload.id || "current-user";
+      } else {
+        updates.updatedBy = "current-user";
+      }
+    } catch (e) {
+      console.error("📤 [API] Error getting user ID from token:", e);
+      updates.updatedBy = "current-user";
+    }
+  }
+
   try {
     const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
       method: "PATCH",
@@ -1101,8 +1140,13 @@ export const fetchProjectsByWorkspace = async (
   workspaceId: string
 ): Promise<Project[]> => {
   try {
+    if (!workspaceId) {
+      console.error("No workspace ID provided to fetchProjectsByWorkspace");
+      return [];
+    }
+
     console.log(`Fetching projects for workspace ${workspaceId}`);
-    const headers = getAuthHeaders();
+    const headers = getAuthHeaders() as Record<string, string>;
     console.log(
       "Authorization header length:",
       headers.Authorization?.length || 0
@@ -1115,12 +1159,16 @@ export const fetchProjectsByWorkspace = async (
       return [];
     }
 
+    // Add a timestamp and random string to prevent caching
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 10);
     const response = await fetch(
-      `${API_BASE_URL}/workspaces/${workspaceId}/projects`,
+      `${API_BASE_URL}/workspaces/${workspaceId}/projects?_t=${timestamp}&_r=${randomStr}`,
       {
         method: "GET",
         headers,
-        // Remove credentials:include which can cause CORS issues
+        // Set cache: 'no-store' to prevent caching
+        cache: "no-store",
       }
     );
 
@@ -1157,12 +1205,67 @@ export const fetchProjectsByWorkspace = async (
     }
 
     const projects = await response.json();
-    console.log(`Successfully fetched ${projects.length} projects`);
-    return projects;
+    console.log(
+      `Successfully fetched ${
+        projects?.length || 0
+      } projects for workspace ${workspaceId}`
+    );
+
+    // Check if we have a valid array of projects
+    if (!Array.isArray(projects)) {
+      console.error("API returned non-array response for projects:", projects);
+      return [];
+    }
+
+    // Log project workspaceIds for debugging
+    const workspaceIds = projects
+      .map((p) => p.workspaceId || (p.workspace && p.workspace._id))
+      .filter(Boolean);
+    console.log(`Project workspace IDs: [${workspaceIds.join(", ")}]`);
+
+    // Ensure each project has the correct workspaceId
+    const validatedProjects = projects.filter((project: Project) => {
+      // Skip projects with no ID
+      if (!project || !project._id) {
+        console.warn("Found project with no ID, skipping");
+        return false;
+      }
+
+      // Check if it has the correct workspaceId
+      const projectWorkspaceId =
+        project.workspaceId || (project.workspace && project.workspace._id);
+
+      if (projectWorkspaceId !== workspaceId) {
+        console.warn(
+          `Project ${project._id} has incorrect workspace ID: ${projectWorkspaceId} vs ${workspaceId}`
+        );
+        return false;
+      }
+
+      // Make sure project has a workspaceId property even if it's in project.workspace._id
+      if (!project.workspaceId && project.workspace && project.workspace._id) {
+        project.workspaceId = project.workspace._id;
+      }
+
+      return true;
+    });
+
+    if (validatedProjects.length !== projects.length) {
+      console.warn(
+        `Filtered out ${
+          projects.length - validatedProjects.length
+        } projects with incorrect workspace ID`
+      );
+    }
+
+    console.log(
+      `Returning ${validatedProjects.length} validated projects for workspace ${workspaceId}`
+    );
+    return validatedProjects;
   } catch (error) {
     console.error(
       `Error fetching projects for workspace ${workspaceId}:`,
-      error
+      error instanceof Error ? error.message : String(error)
     );
     // Return empty array instead of throwing to prevent UI errors
     return [];

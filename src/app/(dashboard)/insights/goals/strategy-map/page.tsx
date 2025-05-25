@@ -270,10 +270,7 @@ export default function StrategyMapPage() {
             <RefreshCw className="h-4 w-4 mr-1" />
             Refresh Map
           </Button>
-          <Button size="sm" onClick={handleCreateGoal} className="bg-[#4573D2]">
-            <Plus className="h-4 w-4 mr-1" />
-            Create goal
-          </Button>
+          
         </div>
         {rootGoal ? (
           <StrategyMapView

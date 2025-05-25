@@ -13,10 +13,8 @@ export function WorkspaceTabs({ workspaceId }: WorkspaceTabsProps) {
   // Define the tabs for navigation
   const tabs = [
     { label: "Overview", href: `/workspaces/${workspaceId}/overview` },
-    { label: "All work", href: `/workspaces/${workspaceId}/work` },
     { label: "Messages", href: `/workspaces/${workspaceId}/messages` },
     { label: "Calendar", href: `/workspaces/${workspaceId}/calendar` },
-    { label: "Knowledge", href: `/workspaces/${workspaceId}/knowledge` },
   ];
 
   return (

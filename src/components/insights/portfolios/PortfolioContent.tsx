@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Plus, X, GripVertical } from "lucide-react";
-import { Portfolio, Project } from "@/types";
-import { fetchUserById, updatePortfolioProjectsOrder } from "@/api-service";
+import { Portfolio, Project, User, Task } from "@/types";
+import {
+  fetchUserById,
+  updatePortfolioProjectsOrder,
+  fetchProjectMembers,
+  fetchTasksByProject,
+} from "@/api-service";
 import {
   DragDropContext,
   Droppable,
@@ -10,12 +15,14 @@ import {
   DropResult,
 } from "@hello-pangea/dnd";
 import { useToast } from "@/components/ui/use-toast";
+import { formatUsername, getInitials } from "@/lib/user-utils";
 
 interface PortfolioContentProps {
   activeTab: string;
   portfolio: Portfolio;
   projectsData: Project[];
   onRemoveProject: (projectId: string) => void;
+  onProgressCalculated?: (progress: number) => void;
 }
 
 export const PortfolioContent: React.FC<PortfolioContentProps> = ({
@@ -23,11 +30,23 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
   portfolio,
   projectsData,
   onRemoveProject,
+  onProgressCalculated,
 }) => {
   // State to store user data
   const [userMap, setUserMap] = useState<
     Record<string, { fullName: string; email: string }>
   >({});
+
+  // State for project members
+  const [projectMembers, setProjectMembers] = useState<User[]>([]);
+
+  // State to store project task progress
+  const [projectProgress, setProjectProgress] = useState<
+    Record<string, number>
+  >({});
+
+  // Ref to track if a calculation is in progress
+  const isCalculatingRef = useRef(false);
 
   // State to store projects for DnD
   const [projects, setProjects] = useState<Project[]>([]);
@@ -38,12 +57,147 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
     setProjects(projectsData);
   }, [projectsData]);
 
+  // Fetch tasks for each project to calculate progress
+  useEffect(() => {
+    const calculateProjectProgress = async () => {
+      if (projects.length === 0) return;
+
+      // Check if calculation is already in progress
+      if (isCalculatingRef.current) return;
+
+      // Set the flag to indicate calculation is in progress
+      isCalculatingRef.current = true;
+
+      const progressData: Record<string, number> = {};
+
+      try {
+        for (const project of projects) {
+          try {
+            // Fetch all tasks for this project
+            const tasks: Task[] = await fetchTasksByProject(project._id);
+
+            if (tasks && tasks.length > 0) {
+              // Calculate completion percentage (all tasks weighted equally)
+              const totalTasks = tasks.length;
+              const completedTasks = tasks.filter(
+                (task) => task.completed || task.status === "completed"
+              ).length;
+
+              // Calculate progress as percentage
+              const progress =
+                totalTasks > 0
+                  ? Math.round((completedTasks / totalTasks) * 100)
+                  : 0;
+
+              progressData[project._id] = progress;
+            } else {
+              // No tasks found
+              progressData[project._id] = 0;
+            }
+          } catch (error) {
+            console.error(
+              `Failed to fetch tasks for project ${project._id}:`,
+              error
+            );
+            progressData[project._id] = 0;
+          }
+        }
+
+        setProjectProgress(progressData);
+
+        // Calculate and notify parent about overall progress
+        if (onProgressCalculated) {
+          const overallProgress = calculatePortfolioProgress(progressData);
+          onProgressCalculated(overallProgress);
+        }
+      } catch (error) {
+        console.error("Error calculating project progress:", error);
+      } finally {
+        // Reset the flag when calculation is complete
+        isCalculatingRef.current = false;
+      }
+    };
+
+    calculateProjectProgress();
+  }, [projects, onProgressCalculated]);
+
+  // Fetch project members for all projects in the portfolio
+  useEffect(() => {
+    if (projectsData.length > 0) {
+      const loadProjectMembers = async () => {
+        try {
+          // Keep track of processed project IDs to avoid duplicate calls
+          const processedProjectIds = new Set<string>();
+
+          // Create a new map to store all members across projects
+          const newMembersMap: Record<string, User> = {};
+
+          // For each project, fetch its members
+          for (const project of projectsData) {
+            // Skip if we've already processed this project
+            if (processedProjectIds.has(project._id)) continue;
+
+            // Mark as processed
+            processedProjectIds.add(project._id);
+
+            try {
+              const members = await fetchProjectMembers(project._id);
+              if (members && members.length > 0) {
+                // Add members to the map with user ID as key
+                members.forEach((member) => {
+                  if (member._id) {
+                    newMembersMap[member._id] = member;
+                  }
+                });
+              }
+            } catch (error) {
+              console.error(
+                `Failed to fetch members for project ${project._id}:`,
+                error
+              );
+            }
+          }
+
+          // Only update state if we have new members to add
+          if (Object.keys(newMembersMap).length > 0) {
+            // Convert map to array for component state
+            const membersArray = Object.values(newMembersMap);
+            setProjectMembers(membersArray);
+
+            // Also update userMap with project members
+            const newUserMap: Record<
+              string,
+              { fullName: string; email: string }
+            > = {};
+            membersArray.forEach((member) => {
+              newUserMap[member._id] = {
+                email: member.email || "Unknown",
+                fullName: member.fullName || formatUsername(member.email),
+              };
+            });
+
+            if (Object.keys(newUserMap).length > 0) {
+              setUserMap((prev) => ({ ...prev, ...newUserMap }));
+            }
+          }
+        } catch (error) {
+          console.error("Error loading project members:", error);
+        }
+      };
+
+      loadProjectMembers();
+    }
+  }, [projectsData]);
+
   // Fetch user data for project owners
   useEffect(() => {
     async function loadUsers() {
       try {
         const newUserMap: Record<string, { fullName: string; email: string }> =
           {};
+
+        // Track processed user IDs locally
+        const processedUserIds: Set<string> = new Set();
 
         // First collect all unique user IDs from project roles
         const uniqueUserIds: string[] = [];
@@ -61,6 +215,26 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
 
         // Fetch each user's data
         for (const userId of uniqueUserIds) {
+          // Skip if we've already processed this user in this run
+          if (processedUserIds.has(userId)) continue;
+
+          // Mark as processed
+          processedUserIds.add(userId);
+
+          // Check if the user is in projectMembers
+          const memberMatch = projectMembers.find(
+            (member) => member._id === userId
+          );
+          if (memberMatch) {
+            newUserMap[userId] = {
+              email: memberMatch.email || "Unknown",
+              fullName:
+                memberMatch.fullName || formatUsername(memberMatch.email),
+            };
+            continue;
+          }
+
+          // If not in projectMembers, fetch individually
           try {
             const user = await fetchUserById(userId);
             if (user) {
@@ -79,7 +253,10 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
           }
         }
 
-        setUserMap(newUserMap);
+        // Only update if we have new users to add
+        if (Object.keys(newUserMap).length > 0) {
+          setUserMap((prev) => ({ ...prev, ...newUserMap }));
+        }
       } catch (error) {
         console.error("Error loading users:", error);
       }
@@ -88,26 +265,7 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
     if (projectsData.length > 0) {
       loadUsers();
     }
-  }, [projectsData]);
-
-  // Format username from email
-  const formatUsername = (email: string): string => {
-    if (!email || !email.includes("@")) return email;
-
-    return email
-      .split("@")[0]
-      .replace(/\./g, " ")
-      .replace(/(\w)(\w*)/g, (_, first, rest) => first.toUpperCase() + rest);
-  };
-
-  // Get initials from a name (for avatar)
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((part) => (part ? part[0] : ""))
-      .join("")
-      .toUpperCase();
-  };
+  }, [projectsData, projectMembers]);
 
   // Render progress bar
   const renderProgressBar = (progress: number = 0) => {
@@ -121,19 +279,19 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
     );
   };
 
-  // Get a user's display name - simplified to avoid email display
+  // Get a user's display name - using consistent approach with task-details
   const getDisplayName = (userId: string): string => {
-    // If we have user data, use the full name
+    // If we have user data, always prefer the full name
     if (userMap[userId]?.fullName) {
       return userMap[userId].fullName;
     }
 
-    // For email addresses, format the username part
+    // If it's an email address, format it nicely
     if (userId.includes("@")) {
       return formatUsername(userId);
     }
 
-    // Fallback for IDs
+    // Fallback for when we have a user ID but no user data
     return `User ${userId.substring(0, 6)}`;
   };
 
@@ -182,6 +340,24 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
     }
   };
 
+  // Calculate overall portfolio progress based on project progress
+  const calculatePortfolioProgress = (
+    progressData?: Record<string, number>
+  ): number => {
+    if (projects.length === 0) return 0;
+
+    // Use provided progress data or fall back to state
+    const data = progressData || projectProgress;
+
+    // Sum up all project progress values
+    const totalProgress = projects.reduce((sum, project) => {
+      return sum + (data[project._id] || 0);
+    }, 0);
+
+    // Calculate average progress across all projects
+    return Math.round(totalProgress / projects.length);
+  };
+
   return (
     <div className="container mx-auto px-3 py-3 bg-[#121212] h-full">
       {/* Toolbar */}
@@ -214,15 +390,7 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
         </div>
       </div>
 
-      {/* Portfolio progress info */}
-      {portfolio.progress > 0 && (
-        <div className="mb-4 p-3 bg-[#353535] rounded">
-          <h3 className="text-sm font-medium text-white mb-2">
-            Portfolio Progress: {portfolio.progress}%
-          </h3>
-          {renderProgressBar(portfolio.progress)}
-        </div>
-      )}
+      {/* Portfolio progress info - REMOVED */}
 
       {/* Content based on active tab */}
       <div className="space-y-4 pb-12">
@@ -322,12 +490,10 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
                               </div>
                               <div className="p-2">
                                 {renderProgressBar(
-                                  project.status === "completed" ? 100 : 0
+                                  projectProgress[project._id] || 0
                                 )}
                                 <span className="text-xs text-gray-400 ml-1">
-                                  {project.status === "completed"
-                                    ? "100%"
-                                    : "0%"}
+                                  {projectProgress[project._id] || 0}%
                                 </span>
                               </div>
                               <div className="p-2 flex items-center">
@@ -344,10 +510,9 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
                                                 (r) => r.role === "Owner"
                                               )?.userId || ""
                                             );
-                                            const name =
-                                              userMap[ownerUserId]?.fullName ||
-                                              formatUsername(ownerUserId);
-                                            return getInitials(name);
+                                            return getInitials(
+                                              getDisplayName(ownerUserId)
+                                            );
                                           })()}
                                         </span>
                                         <span className="truncate">

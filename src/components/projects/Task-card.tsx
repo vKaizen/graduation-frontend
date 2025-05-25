@@ -137,6 +137,18 @@ export function TaskCard({
     }
   }, [isExpanded, taskData]);
 
+  // Add this to the useEffect that handles expanded state
+  useEffect(() => {
+    // When task status changes, make sure the UI updates
+    // This will refresh the component when the task object changes
+    if (cardRef.current && task) {
+      const height = cardRef.current.scrollHeight;
+      if (isExpanded) {
+        setCardHeight(height);
+      }
+    }
+  }, [task, isExpanded]);
+
   const toggleExpand = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isEditing) {
@@ -600,13 +612,13 @@ export function TaskCard({
                   </span>
                 )}
 
-                {/* Status pill */}
+                {/* Status pill - updated to show more prominently for completed tasks */}
                 {task.status && task.status !== "not started" && (
                   <span
                     className={cn(
                       "px-2 py-0.5 text-xs rounded-full capitalize font-medium",
                       task.status === "completed"
-                        ? "bg-green-500/20 text-green-300"
+                        ? "bg-green-500/30 text-green-300 ring-1 ring-green-500/50" // Enhanced for completed tasks
                         : task.status === "in progress" ||
                           task.status === "on track"
                         ? "bg-emerald-500/20 text-emerald-300"

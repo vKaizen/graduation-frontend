@@ -7,10 +7,15 @@ import { BaseCard } from "./BaseCard";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { fetchTasksByWorkspace, updateTask } from "@/api-service";
+import {
+  fetchTasksByProject,
+  fetchProjectsByWorkspace,
+  updateTask,
+} from "@/api-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboard } from "@/contexts/DashboardContext";
-import { Task } from "@/types";
+import { Task, Project } from "@/types";
+import { getUserIdCookie } from "@/lib/cookies";
 
 interface TasksCardProps {
   onRemove?: () => void;
@@ -35,7 +40,7 @@ export function TasksCard({
 
   // Fetch tasks from the API
   useEffect(() => {
-    async function fetchTasks() {
+    async function fetchUserTasks() {
       if (!currentWorkspace?._id) {
         setIsLoading(false);
         return;
@@ -45,9 +50,50 @@ export function TasksCard({
       setError(null);
 
       try {
-        const fetchedTasks = await fetchTasksByWorkspace(currentWorkspace._id);
-        console.log("Fetched tasks:", fetchedTasks);
-        setTasks(fetchedTasks || []);
+        // Get current user ID
+        const userId = getUserIdCookie();
+        if (!userId) {
+          setError("User not authenticated");
+          setIsLoading(false);
+          return;
+        }
+
+        // First, fetch all projects in the workspace
+        const projects = await fetchProjectsByWorkspace(currentWorkspace._id);
+
+        if (!projects || projects.length === 0) {
+          console.log("No projects found in workspace");
+          setTasks([]);
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch tasks for each project and combine them
+        let allTasks: Task[] = [];
+
+        await Promise.all(
+          projects.map(async (project: Project) => {
+            try {
+              const projectTasks = await fetchTasksByProject(project._id);
+              if (projectTasks && projectTasks.length > 0) {
+                allTasks = [...allTasks, ...projectTasks];
+              }
+            } catch (err) {
+              console.error(
+                `Error fetching tasks for project ${project._id}:`,
+                err
+              );
+            }
+          })
+        );
+
+        // Filter tasks assigned to the current user
+        const userTasks = allTasks.filter((task) => task.assignee === userId);
+
+        console.log("All tasks:", allTasks.length);
+        console.log("User's tasks:", userTasks.length);
+
+        setTasks(userTasks || []);
       } catch (err) {
         console.error("Error fetching tasks:", err);
         setError("Failed to load tasks");
@@ -56,34 +102,63 @@ export function TasksCard({
       }
     }
 
-    fetchTasks();
+    fetchUserTasks();
   }, [currentWorkspace]);
 
-  // Filter tasks based on their status
-  const upcomingTasks = tasks.filter(
-    (task) => !task.completed && !isOverdue(task.dueDate)
+  // Get current date for accurate overdue calculation
+  const currentDate = new Date();
+
+  // Filter tasks based on their status with improved logic
+  const upcomingTasks = tasks.filter((task) => {
+    // Not completed and has a due date in the future
+    return (
+      !task.completed && task.dueDate && new Date(task.dueDate) >= currentDate
+    );
+  });
+
+  const overdueTasks = tasks.filter((task) => {
+    // Not completed and has a due date in the past
+    return (
+      !task.completed && task.dueDate && new Date(task.dueDate) < currentDate
+    );
+  });
+
+  const completedTasks = tasks.filter(
+    (task) =>
+      // Explicitly marked as completed
+      task.completed === true
   );
-  const overdueTasks = tasks.filter(
-    (task) => !task.completed && isOverdue(task.dueDate)
-  );
-  const completedTasks = tasks.filter((task) => task.completed);
 
   // Helper function to check if a task is overdue
   function isOverdue(dueDate: string | undefined): boolean {
     if (!dueDate) return false;
-    const now = new Date();
-    const due = new Date(dueDate);
-    return due < now;
+    return new Date(dueDate) < currentDate;
   }
 
-  // Format date for display
+  // Format date for display with improved formatting
   function formatDate(dateString: string | undefined): string {
     if (!dateString) return "";
+
     const date = new Date(dateString);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Check if date is today
+    if (date.toDateString() === today.toDateString()) {
+      return "Today";
+    }
+
+    // Check if date is tomorrow
+    if (date.toDateString() === tomorrow.toDateString()) {
+      return "Tomorrow";
+    }
+
+    // Otherwise return formatted date
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
-      year: "numeric",
+      year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
     });
   }
 
@@ -182,16 +257,50 @@ export function TasksCard({
             onClick={() => {
               setIsLoading(true);
               setError(null);
-              fetchTasksByWorkspace(currentWorkspace?._id || "")
-                .then((tasks) => {
-                  setTasks(tasks || []);
+              // Try again with improved error handling
+              const userId = getUserIdCookie();
+              if (!userId) {
+                setError("User not authenticated");
+                setIsLoading(false);
+                return;
+              }
+
+              // Use the same approach as above for retry
+              fetchProjectsByWorkspace(currentWorkspace?._id || "").then(
+                async (projects) => {
+                  if (!projects || projects.length === 0) {
+                    setTasks([]);
+                    setIsLoading(false);
+                    return;
+                  }
+
+                  let allTasks: Task[] = [];
+
+                  await Promise.all(
+                    projects.map(async (project: Project) => {
+                      try {
+                        const projectTasks = await fetchTasksByProject(
+                          project._id
+                        );
+                        if (projectTasks && projectTasks.length > 0) {
+                          allTasks = [...allTasks, ...projectTasks];
+                        }
+                      } catch (err) {
+                        console.error(
+                          `Error fetching tasks for project ${project._id}:`,
+                          err
+                        );
+                      }
+                    })
+                  );
+
+                  const userTasks = allTasks.filter(
+                    (task) => task.assignee === userId
+                  );
+                  setTasks(userTasks || []);
                   setIsLoading(false);
-                })
-                .catch((err) => {
-                  console.error("Error retrying task fetch:", err);
-                  setError("Failed to load tasks");
-                  setIsLoading(false);
-                });
+                }
+              );
             }}
           >
             Retry
@@ -222,7 +331,7 @@ export function TasksCard({
             )}
             onClick={() => setActiveTab("upcoming")}
           >
-            Upcoming
+            Upcoming ({upcomingTasks.length})
           </button>
           <button
             className={cn(
@@ -233,7 +342,9 @@ export function TasksCard({
             )}
             onClick={() => setActiveTab("overdue")}
           >
-            Overdue ({overdueTasks.length})
+            <span className={overdueTasks.length > 0 ? "text-red-400" : ""}>
+              Overdue ({overdueTasks.length})
+            </span>
           </button>
           <button
             className={cn(
@@ -244,22 +355,11 @@ export function TasksCard({
             )}
             onClick={() => setActiveTab("completed")}
           >
-            Completed
+            Completed ({completedTasks.length})
           </button>
         </div>
 
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 mb-4 text-white font-medium hover:bg-white/5 p-2"
-          onClick={handleCreateTask}
-        >
-          <div className="h-10 w-10 rounded flex items-center justify-center border-2 border-dashed border-gray-600">
-            <Plus className="h-5 w-5" />
-          </div>
-          Create task
-        </Button>
-
-        <div className="space-y-2 flex-1 overflow-y-auto">
+        <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
           {activeTab === "upcoming" &&
             upcomingTasks.map((task) => (
               <div
@@ -284,6 +384,17 @@ export function TasksCard({
                     </div>
                   )}
                 </div>
+                {task.project && (
+                  <div
+                    className="px-2 py-1 text-xs rounded bg-opacity-20"
+                    style={{
+                      backgroundColor: `${task.project.color}40` || "#4573D240",
+                      color: task.project.color || "#4573D2",
+                    }}
+                  >
+                    {task.project.name}
+                  </div>
+                )}
               </div>
             ))}
 
@@ -311,6 +422,17 @@ export function TasksCard({
                     </div>
                   )}
                 </div>
+                {task.project && (
+                  <div
+                    className="px-2 py-1 text-xs rounded bg-opacity-20"
+                    style={{
+                      backgroundColor: `${task.project.color}40` || "#4573D240",
+                      color: task.project.color || "#4573D2",
+                    }}
+                  >
+                    {task.project.name}
+                  </div>
+                )}
               </div>
             ))}
 
@@ -332,10 +454,23 @@ export function TasksCard({
                 </div>
                 <div className="flex-1">
                   <div className="text-gray-400 line-through">{task.title}</div>
-                  {task.dueDate && (
-                    <div className="text-xs text-gray-500">Completed</div>
+                  {task.completedAt && (
+                    <div className="text-xs text-gray-500">
+                      Completed: {formatDate(task.completedAt)}
+                    </div>
                   )}
                 </div>
+                {task.project && (
+                  <div
+                    className="px-2 py-1 text-xs rounded bg-opacity-10"
+                    style={{
+                      backgroundColor: `${task.project.color}20` || "#4573D220",
+                      color: `${task.project.color}99` || "#4573D299",
+                    }}
+                  >
+                    {task.project.name}
+                  </div>
+                )}
               </div>
             ))}
 

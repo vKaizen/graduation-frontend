@@ -16,6 +16,12 @@ import {
   clearAuthCookies,
 } from "@/lib/cookies";
 
+// Add a global flag to indicate logout state
+let isLoggingOut = false;
+
+// Export a function to check if we're in the process of logging out
+export const getIsLoggingOut = () => isLoggingOut;
+
 interface AuthState {
   accessToken: string | null;
   userId: string | null;
@@ -42,6 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state from cookies on mount
   useEffect(() => {
+    // Reset logout flag on component mount
+    isLoggingOut = false;
+
     const token = getAuthCookie();
     const userId = getUserIdCookie();
 
@@ -63,6 +72,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = (token: string, userId: string, username?: string) => {
+    // Reset logout flag when logging in
+    isLoggingOut = false;
+
     console.log("Setting auth state:", { token, userId, username });
 
     // Set cookies
@@ -78,6 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    // Set the logging out flag to true
+    isLoggingOut = true;
+
+    // Create an AbortController to cancel any in-flight requests
+    const controller = new AbortController();
+    controller.abort();
+
     // Clear cookies
     clearAuthCookies();
 
@@ -88,8 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username: null,
     });
 
-    // Redirect to home/login
-    router.push("/");
+    // Redirect to home/login immediately
+    router.push("/", { forceOptimisticNavigation: true });
+
+    // Reset the logout flag after a very short delay
+    // This ensures any in-flight requests complete before we reset the flag
+    setTimeout(() => {
+      isLoggingOut = false;
+    }, 100); // Reduced from 1000ms to 100ms for faster logout
   };
 
   return (

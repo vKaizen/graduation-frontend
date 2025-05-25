@@ -42,7 +42,7 @@ export default function PortfoliosPage() {
   }, [currentWorkspace]);
 
   return (
-    <div className="min-h-screen bg-[#1E201E] pt-8 px-4">
+    <div className="min-h-screen bg-[#121212] pt-8 px-4">
       {/* Header with title and create button */}
       <div className="container mx-auto flex items-center justify-between mb-8">
         <div>

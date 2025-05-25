@@ -343,9 +343,10 @@ export function ProjectView({
         updatedTaskData
       );
 
-      // Update both project and originalProject with the response from the API
+      // Create a copy of the project sections for immediate UI update
       const updatedSections = project.sections.map((section) => {
-        if (section._id === sectionId) {
+        // Find all instances of this task in any section
+        if (section.tasks.some((t) => t._id === taskId)) {
           return {
             ...section,
             tasks: section.tasks.map((task) =>
@@ -356,9 +357,16 @@ export function ProjectView({
         return section;
       });
 
+      // Update both project and originalProject with the response from the API
+      setProject({
+        ...project,
+        sections: updatedSections,
+      });
+
+      // Also update originalProject to ensure filters and sorts work correctly
       const updatedOriginalSections = originalProject.sections.map(
         (section) => {
-          if (section._id === sectionId) {
+          if (section.tasks.some((t) => t._id === taskId)) {
             return {
               ...section,
               tasks: section.tasks.map((task) =>
@@ -369,11 +377,6 @@ export function ProjectView({
           return section;
         }
       );
-
-      setProject({
-        ...project,
-        sections: updatedSections,
-      });
 
       setOriginalProject({
         ...originalProject,

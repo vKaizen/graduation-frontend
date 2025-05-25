@@ -1,3 +1,5 @@
+"use client";
+
 import {
   CircleDot,
   FileText,
@@ -24,15 +26,59 @@ import {
 import { Input } from "./ui/input";
 import Link from "next/link";
 import { NotificationsContainer } from "./notifications/NotificationsContainer";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEffect, useState } from "react";
+import { fetchUserById } from "@/api-service";
+import { getInitials } from "@/lib/user-utils";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 export function Header() {
+  const { authState, logout } = useAuth();
+  const { currentWorkspace } = useWorkspace();
+  const [userData, setUserData] = useState<{
+    fullName: string;
+    email: string;
+    initials: string;
+  }>({
+    fullName: "Loading...",
+    email: "Loading...",
+    initials: "...",
+  });
+
+  // Fetch user data when component mounts
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (authState.userId) {
+        try {
+          const user = await fetchUserById(authState.userId);
+          setUserData({
+            fullName: user.fullName || user.name || "My Account",
+            email: user.email || authState.username || "user@example.com",
+            initials: getInitials(user.fullName || user.name || "My Account"),
+          });
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          setUserData({
+            fullName: "My Account",
+            email: authState.username || "user@example.com",
+            initials: "MA",
+          });
+        }
+      }
+    };
+
+    loadUserData();
+  }, [authState.userId, authState.username]);
+
   return (
     <header className="h-14 border-b border-[#353535] bg-[#1a1a1a] flex items-center">
       <div className="flex items-center w-64 px-4">
         <Button variant="ghost" size="icon" className="text-gray-400 -ml-2">
           <Menu className="h-5 w-5" />
         </Button>
-        <span className="text-white font-medium ml-3">My Workspace</span>
+        <span className="text-white font-medium ml-3">
+          {currentWorkspace?.name || "My Workspace"}
+        </span>
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -107,27 +153,15 @@ export function Header() {
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-80 mr-2 mt-2 p-0 bg-[#1a1a1a] border-[#353535] text-white">
           <div className="p-4 flex items-center gap-3">
-            <Avatar className="h-12 w-12 bg-orange-300">
-              <AvatarFallback>CX</AvatarFallback>
+            <Avatar className="h-12 w-12 bg-purple-600">
+              <AvatarFallback>{userData.initials}</AvatarFallback>
             </Avatar>
             <div>
-              <div className="font-medium text-white">My workspace</div>
-              <div className="text-sm text-gray-400">vd7comm@gmail.com</div>
+              <div className="font-medium text-white">
+                {currentWorkspace?.name || "My Workspace"}
+              </div>
+              <div className="text-sm text-gray-400">{userData.email}</div>
             </div>
-          </div>
-          <DropdownMenuSeparator className="bg-[#353535]" />
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
-            <Settings className="mr-2 h-4 w-4" />
-            Admin console
-          </DropdownMenuItem>
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
-            <Plus className="mr-2 h-4 w-4" />
-            New workspace
-          </DropdownMenuItem>
-          <div className="p-3">
-            <Button className="w-full bg-orange-300 text-orange-900 hover:bg-orange-400">
-              Upgrade
-            </Button>
           </div>
           <DropdownMenuSeparator className="bg-[#353535]" />
           <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
@@ -143,7 +177,10 @@ export function Header() {
             Add another account
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-[#353535]" />
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
+          <DropdownMenuItem
+            className="py-2.5 focus:bg-[#353535] text-white"
+            onClick={logout}
+          >
             <LogOut className="mr-2 h-4 w-4" />
             Log out
           </DropdownMenuItem>

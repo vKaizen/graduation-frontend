@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Info } from "lucide-react";
+import { Info } from 'lucide-react';
 import { fetchGoalHierarchy } from "@/api-service";
 import { Goal } from "@/types";
 import ReactFlow, {
@@ -21,6 +21,37 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { useRouter } from "next/navigation";
 import { StrategyMapNode } from "./StrategyMapNode";
+
+// Dynamic spacing calculation function with increased spacing for goals
+const calculateSpacing = (itemCount: number, minSpacing: number = 400) => {
+  if (itemCount <= 1) return minSpacing;
+  if (itemCount <= 3) return Math.max(minSpacing, 500);
+  if (itemCount <= 5) return Math.max(minSpacing, 600);
+  return Math.max(minSpacing, 700);
+};
+
+// Enhanced spacing calculation specifically for goal nodes (middle layer)
+const calculateGoalSpacing = (itemCount: number, minSpacing: number = 600) => {
+  if (itemCount <= 1) return minSpacing;
+  if (itemCount <= 2) return Math.max(minSpacing, 800);  // Increased from 500 to 800
+  if (itemCount <= 3) return Math.max(minSpacing, 900);  // Increased from 600 to 900
+  if (itemCount <= 4) return Math.max(minSpacing, 1000); // Increased from 700 to 1000
+  if (itemCount <= 5) return Math.max(minSpacing, 1100); // New tier
+  return Math.max(minSpacing, 1200); // Increased maximum spacing
+};
+
+// Calculate adaptive vertical spacing based on bottom layer width
+const calculateAdaptiveSpacing = (bottomLayerWidth: number, goalLayerWidth: number) => {
+  const baseSpacing = 300;
+  const widthRatio = bottomLayerWidth / Math.max(goalLayerWidth, 1000); // Prevent division by zero
+  
+  // If bottom layer is much wider than goal layer, increase vertical spacing
+  if (widthRatio > 2) {
+    return baseSpacing + (widthRatio - 2) * 100; // Add 100px for each ratio unit above 2
+  }
+  
+  return baseSpacing;
+};
 
 // Custom edge component
 const CustomEdge = ({
@@ -239,11 +270,54 @@ export const StrategyMapView = ({
         const strategyNodes: Node[] = [];
         const strategyEdges: Edge[] = [];
 
-        // Create workspace root node (centered at the top)
+        // Get all goals (direct children of workspace)
+        const goals = rootGoal.children || [];
+        console.log(`Found ${goals.length} goals:`, goals);
+
+        // Calculate horizontal layout for goals with ENHANCED spacing
+        const GOALS_LEVEL_Y = 250;
+        const GOALS_SPACING = calculateGoalSpacing(goals.length); // Using enhanced spacing function
+
+        // Calculate the total width needed for all goals
+        const totalGoalWidth = goals.length * GOALS_SPACING;
+        // Start position should center the goals array
+        let startX = 400 - totalGoalWidth / 2 + GOALS_SPACING / 2;
+
+        if (goals.length === 1) {
+          // If only one goal, center it below the root
+          startX = 400;
+        }
+
+        // First pass: Calculate total bottom layer nodes and their required width
+        let totalBottomNodes = 0;
+        goals.forEach((goal) => {
+          if (goal.progressResource === "projects" && goal.projects && goal.projects.length > 0) {
+            totalBottomNodes += goal.projects.length;
+          } else if (goal.progressResource === "tasks" && goal.linkedTasks && goal.linkedTasks.length > 0) {
+            totalBottomNodes += goal.linkedTasks.length;
+          }
+        });
+
+        // Calculate bottom layer spacing and total width
+        const bottomSpacing = calculateSpacing(totalBottomNodes, 450);
+        const totalBottomWidth = totalBottomNodes * bottomSpacing;
+
+        // Calculate adaptive vertical spacing based on width comparison
+        const adaptiveVerticalSpacing = calculateAdaptiveSpacing(totalBottomWidth, totalGoalWidth);
+        const PROGRESS_SOURCE_LEVEL_Y = GOALS_LEVEL_Y + adaptiveVerticalSpacing;
+
+        console.log(`Goal layer: ${goals.length} nodes, spacing: ${GOALS_SPACING}px, total width: ${totalGoalWidth}px`);
+        console.log(`Bottom layer: ${totalBottomNodes} nodes, width: ${totalBottomWidth}px`);
+        console.log(`Adaptive vertical spacing: ${adaptiveVerticalSpacing}px`);
+
+        // Calculate root position (center of goals)
+        const rootX = goals.length > 0 ? startX + (goals.length - 1) * GOALS_SPACING / 2 : 400;
+
+        // Create workspace root node (centered above goals)
         const rootNode: Node = {
           id: "workspace-root",
           type: "goalNode",
-          position: { x: 400, y: 50 },
+          position: { x: rootX, y: 50 },
           data: {
             isRoot: true,
             title: rootGoal.workspace?.name || "My workspace",
@@ -257,24 +331,6 @@ export const StrategyMapView = ({
         };
 
         strategyNodes.push(rootNode);
-
-        // Get all goals (direct children of workspace)
-        const goals = rootGoal.children || [];
-        console.log(`Found ${goals.length} goals:`, goals);
-
-        // Calculate horizontal layout for goals
-        const GOALS_LEVEL_Y = 250;
-        const GOALS_SPACING = 400;
-
-        // Calculate the total width needed for all goals
-        const totalWidth = goals.length * GOALS_SPACING;
-        // Start position should center the goals array
-        let startX = 400 - totalWidth / 2 + GOALS_SPACING / 2;
-
-        if (goals.length === 1) {
-          // If only one goal, center it below the root
-          startX = 400;
-        }
 
         // Create goal nodes
         goals.forEach((goal, index) => {
@@ -316,9 +372,6 @@ export const StrategyMapView = ({
             zIndex: 9999,
           });
 
-          // Add progress source layer - show projects or tasks based on goal's progressResource
-          const PROGRESS_SOURCE_LEVEL_Y = GOALS_LEVEL_Y + 300; // Position 300px below the goals
-
           if (
             goal.progressResource === "projects" &&
             goal.projects &&
@@ -329,8 +382,8 @@ export const StrategyMapView = ({
 
             // If we have projects to display
             if (projects.length > 0) {
-              // Calculate spacing for projects under this goal
-              const projectSpacing = 320; // Width of each project node + margin
+              // Calculate spacing for projects under this goal with dynamic spacing
+              const projectSpacing = calculateSpacing(projects.length, 450);
               const totalProjectWidth = projects.length * projectSpacing;
               let projectStartX =
                 x - totalProjectWidth / 2 + projectSpacing / 2;
@@ -411,8 +464,8 @@ export const StrategyMapView = ({
 
             // If we have tasks to display
             if (tasks.length > 0) {
-              // Calculate spacing for tasks under this goal
-              const taskSpacing = 320; // Width of each task node + margin
+              // Calculate spacing for tasks under this goal with dynamic spacing
+              const taskSpacing = calculateSpacing(tasks.length, 450);
               const totalTaskWidth = tasks.length * taskSpacing;
               let taskStartX = x - totalTaskWidth / 2 + taskSpacing / 2;
 
@@ -435,9 +488,9 @@ export const StrategyMapView = ({
 
                 const taskNode: Node = {
                   id: taskNodeId,
-              type: "goalNode",
+                  type: "goalNode",
                   position: { x: taskX, y: PROGRESS_SOURCE_LEVEL_Y },
-              data: {
+                  data: {
                     _id: taskNodeId,
                     title: taskData.title || `Task ${taskIndex + 1}`,
                     description: taskData.description || "",
@@ -462,8 +515,8 @@ export const StrategyMapView = ({
                     strokeWidth: 5,
                     strokeDasharray: "5,5",
                   },
-              markerEnd: {
-                type: MarkerType.ArrowClosed,
+                  markerEnd: {
+                    type: MarkerType.ArrowClosed,
                     color: "red",
                     width: 20,
                     height: 20,

@@ -1,7 +1,7 @@
 export interface Task {
   _id: string;
   title: string;
-  assignee: string | null;
+  assignee: string;
   dueDate?: string;
   priority?: "High" | "Medium" | "Low";
   description?: string;
@@ -11,7 +11,11 @@ export interface Task {
   status: "not started" | "in progress" | "completed";
   order: number;
   section: string;
-  project: string;
+  project: {
+    _id: string;
+    name: string;
+    color: string;
+  };
   createdBy?: string;
   updatedBy?: string;
   updatedByName?: string;
@@ -242,4 +246,5 @@ export interface UpdatePortfolioDto {
   description?: string;
   projects?: string[];
   status?: "on-track" | "at-risk" | "off-track" | "completed" | "no-status";
+  progress?: number;
 }

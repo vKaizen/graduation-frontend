@@ -14,6 +14,7 @@ import {
   getUserWorkspaceRole,
 } from "@/api-service";
 import { getCookie, setCookie } from "@/lib/cookies";
+import { getIsLoggingOut } from "@/contexts/AuthContext";
 
 type WorkspaceRole = "owner" | "admin" | "member" | null;
 
@@ -43,9 +44,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   // Fetch user's role in current workspace
   const fetchCurrentRole = async (workspaceId: string) => {
+    // Skip if we're in the process of logging out
+    if (getIsLoggingOut()) {
+      return;
+    }
+
     try {
       const { role } = await getUserWorkspaceRole(workspaceId);
-      setCurrentRole(role);
+      // Check if we're logging out after the API call
+      if (!getIsLoggingOut()) {
+        setCurrentRole(role);
+      }
     } catch (err) {
       console.error("Error fetching user role:", err);
       setCurrentRole(null);
@@ -54,6 +63,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   // Check if user has permission based on their role
   const hasPermission = (requiredRoles: WorkspaceRole[]): boolean => {
+    // If logging out, return false
+    if (getIsLoggingOut()) {
+      return false;
+    }
+
     // If no role is found but the user is checking for owner permissions,
     // check if the current user is the owner of the workspace
     if (!currentRole && requiredRoles.includes("owner") && currentWorkspace) {
@@ -81,17 +95,43 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshWorkspaces = async () => {
+    // Skip if we're in the process of logging out
+    if (getIsLoggingOut()) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
       const fetchedWorkspaces = await fetchWorkspaces();
+
+      // Check if we're logging out after the API call
+      if (getIsLoggingOut()) {
+        setIsLoading(false);
+        return;
+      }
+
       // Process workspaces to ensure consistent member structure
       const processedWorkspaces = fetchedWorkspaces.map(processWorkspace);
       setWorkspaces(processedWorkspaces);
 
       // If there are no workspaces, create a default one
       if (processedWorkspaces.length === 0) {
+        // Skip workspace creation if logging out
+        if (getIsLoggingOut()) {
+          setIsLoading(false);
+          return;
+        }
+
         const newWorkspace = await createWorkspace("My Workspace");
+
+        // Check if we're logging out after workspace creation
+        if (getIsLoggingOut()) {
+          setIsLoading(false);
+          return;
+        }
+
         const processedNewWorkspace = processWorkspace(newWorkspace);
         setWorkspaces([processedNewWorkspace]);
 
@@ -137,10 +177,38 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Reset workspace state when workspace changes
+    if (currentWorkspace) {
+      console.log(
+        `Current workspace set to: ${currentWorkspace.name} (${currentWorkspace._id})`
+      );
+      // Update cookie
+      setCookie("currentWorkspaceId", currentWorkspace._id, 30);
+      // Fetch user role for this workspace
+      fetchCurrentRole(currentWorkspace._id);
+    }
+  }, [currentWorkspace?._id]);
+
+  useEffect(() => {
     refreshWorkspaces();
   }, []);
 
   const handleSetCurrentWorkspace = (workspace: Workspace) => {
+    // Skip if we're in the process of logging out
+    if (getIsLoggingOut()) {
+      return;
+    }
+
+    // Skip if it's the same workspace
+    if (currentWorkspace && workspace._id === currentWorkspace._id) {
+      return;
+    }
+
+    console.log(
+      `Switching workspace from ${currentWorkspace?.name || "none"} to ${
+        workspace.name
+      }`
+    );
     setCurrentWorkspace(workspace);
     setCookie("currentWorkspaceId", workspace._id, 30);
     fetchCurrentRole(workspace._id);

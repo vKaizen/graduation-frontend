@@ -1,19 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { fetchWorkspaceById } from "@/api-service";
 import { useRouter, useParams } from "next/navigation";
 import { Workspace, User, Project, Goal } from "@/types";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Plus, List } from "lucide-react";
+import { ChevronDown, Plus, List, UserPlus } from "lucide-react";
 import Link from "next/link";
 import {
   fetchWorkspaceMembers,
   fetchProjectsByWorkspace,
   fetchGoals,
+  addProjectMember,
 } from "@/api-service";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MemberInviteModal } from "@/components/workspace/MemberInviteModal";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { getUserIdCookie } from "@/lib/cookies";
 
 // Simple loading component
 function WorkspaceLoading() {
@@ -22,6 +31,105 @@ function WorkspaceLoading() {
       <div className="h-8 w-48 bg-neutral-800 animate-pulse rounded mb-4"></div>
       <div className="h-4 w-64 bg-neutral-800 animate-pulse rounded"></div>
     </div>
+  );
+}
+
+// Add ProjectWithMembership interface
+interface ProjectWithMembership extends Project {
+  isMember: boolean;
+  visibility?: "public" | "invite-only";
+}
+
+// Add a more specific type for Project with visibility field
+type ProjectWithVisibility = Project & {
+  visibility?: "public" | "invite-only";
+};
+
+// Project Join Dialog component
+function ProjectJoinDialog({
+  projectId,
+  projectName,
+  isOpen,
+  onClose,
+  onSuccess,
+}: {
+  projectId: string;
+  projectName: string;
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleJoinProject = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const userId = getUserIdCookie();
+      if (!userId) {
+        throw new Error("User ID not found");
+      }
+
+      await addProjectMember(projectId, {
+        userId,
+        role: "Member",
+      });
+
+      onSuccess();
+      onClose();
+    } catch (error) {
+      console.error("Error joining project:", error);
+      setError("Failed to join project. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md bg-[#1a1a1a] border-[#353535] text-white">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-semibold">
+            Join &quot;{projectName}&quot;
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="py-4">
+          <p className="text-gray-300">
+            Would you like to join this project? You&apos;ll be added as a
+            member and gain access to all project content.
+          </p>
+
+          {error && (
+            <div className="mt-4 p-3 bg-red-900/20 border border-red-800 text-red-100 rounded-md text-sm">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="sm:justify-between gap-2 sm:gap-0">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isLoading}
+            className="mt-2 sm:mt-0 order-2 sm:order-1 w-full sm:w-auto border-[#353535] text-gray-300 hover:text-white hover:bg-[#353535]"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleJoinProject}
+            disabled={isLoading}
+            className="bg-blue-600 hover:bg-blue-700 order-1 sm:order-2 w-full sm:w-auto"
+          >
+            {isLoading ? "Joining..." : "Join Project"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -116,13 +224,20 @@ export default function WorkspaceOverviewPage() {
 }
 
 // Direct implementation of the WorkspaceOverview component
-function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
+function ClientWorkspaceOverview({
+  workspace,
+}: {
+  workspace: Workspace;
+}): React.ReactElement {
   const [members, setMembers] = useState<User[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectWithMembership[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isLoadingGoals, setIsLoadingGoals] = useState(true);
+  const [selectedProject, setSelectedProject] =
+    useState<ProjectWithMembership | null>(null);
+  const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -140,7 +255,35 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
         ]);
 
         setMembers(membersData);
-        setProjects(projectsData);
+
+        // Get current user ID
+        const userId = getUserIdCookie();
+        console.log("Current user ID:", userId);
+
+        // Process projects without fetching members individually
+        const projectsWithMembership = projectsData.map((project) => {
+          // Default to not a member - we'll determine this another way
+          // We can assume a user is a member if they have explicit permissions or are the creator
+          const isMember =
+            // Check if user is creator of project
+            project.createdBy === userId ||
+            // Or check if user has a role in the project
+            (Array.isArray(project.roles) &&
+              project.roles.some((role) => role.userId === userId));
+
+          // Cast to ProjectWithVisibility first to access visibility
+          const projectWithVisibility = project as ProjectWithVisibility;
+
+          return {
+            ...project,
+            isMember,
+            // Default visibility to public if not specified
+            visibility: projectWithVisibility.visibility || "public",
+          };
+        }) as ProjectWithMembership[];
+
+        console.log("Projects with membership:", projectsWithMembership);
+        setProjects(projectsWithMembership);
         setGoals(goalsData);
       } catch (error) {
         console.error("Failed to load workspace data:", error);
@@ -155,6 +298,67 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
 
   const handleCreateGoal = () => {
     router.push("/goals/new");
+  };
+
+  const handleJoinClick = (
+    project: ProjectWithMembership,
+    e: React.MouseEvent
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedProject(project);
+    setIsJoinDialogOpen(true);
+  };
+
+  const handleJoinSuccess = () => {
+    // Refresh the data after joining
+    const loadData = async () => {
+      try {
+        const [projectsData] = await Promise.all([
+          fetchProjectsByWorkspace(workspace._id),
+        ]);
+
+        // Get current user ID
+        const userId = getUserIdCookie();
+
+        // Update project membership status without fetching members
+        if (userId) {
+          const updatedProjects = projectsData.map((project) => {
+            const isMember =
+              project.createdBy === userId ||
+              (Array.isArray(project.roles) &&
+                project.roles.some((role) => role.userId === userId));
+
+            const projectWithVisibility = project as ProjectWithVisibility;
+
+            return {
+              ...project,
+              isMember,
+              visibility: projectWithVisibility.visibility || "public",
+            };
+          }) as ProjectWithMembership[];
+
+          setProjects(updatedProjects);
+        } else {
+          // Set projects with no membership if no user ID
+          const defaultProjects = projectsData.map((project) => {
+            const projectWithVisibility = project as ProjectWithVisibility;
+
+            return {
+              ...project,
+              isMember: false,
+              visibility: projectWithVisibility.visibility || "public",
+            };
+          }) as ProjectWithMembership[];
+
+          setProjects(defaultProjects);
+        }
+      } catch (error) {
+        console.error("Failed to refresh projects:", error);
+      }
+    };
+
+    loadData();
   };
 
   // Helper function to get status color based on goal status
@@ -237,30 +441,78 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
               </div>
             ) : (
               <div className="space-y-3">
-                {projects.slice(0, 3).map((project) => (
-                  <Link
-                    key={project._id}
-                    href={`/projects/${project._id}/board`}
-                    className="block p-4 rounded-lg bg-[#1a1a1a] hover:bg-[#353535] transition-colors border border-[#353535]"
-                  >
-                    <div className="flex items-center">
-                      <div
-                        className="h-8 w-8 rounded-md mr-3 flex items-center justify-center"
-                        style={{ backgroundColor: project.color || "#4573D2" }}
-                      >
-                        <List className="h-4 w-4 text-white" />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-medium">
-                          {project.name}
-                        </h3>
-                        <p className="text-sm text-[#a1a1a1]">
-                          {project.description || "No description"}
-                        </p>
+                {projects.slice(0, 3).map((project) => {
+                  // Determine if project is private (based on visibility or any other property available)
+                  const isPrivate = project.visibility === "invite-only";
+
+                  return (
+                    <div
+                      key={project._id}
+                      className="p-4 rounded-lg bg-[#1a1a1a] hover:bg-[#353535] transition-colors border border-[#353535]"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div
+                            className="h-8 w-8 rounded-md mr-3 flex items-center justify-center"
+                            style={{
+                              backgroundColor: project.color || "#4573D2",
+                            }}
+                          >
+                            <List className="h-4 w-4 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-white font-medium">
+                              {project.name}
+                            </h3>
+                            <p className="text-sm text-[#a1a1a1]">
+                              {project.description || "No description"}
+                            </p>
+                            {/* Show visibility badge */}
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded mt-1 inline-block ${
+                                isPrivate
+                                  ? "bg-red-900/20 text-red-300"
+                                  : "bg-green-900/20 text-green-300"
+                              }`}
+                            >
+                              {isPrivate ? "Private" : "Public"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Button logic - for private projects, only show if user is member */}
+                        {isPrivate ? (
+                          // For private projects, only show button if already a member
+                          project.isMember && (
+                            <Link
+                              href={`/projects/${project._id}/board`}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded"
+                            >
+                              View Project
+                            </Link>
+                          )
+                        ) : // For public projects, show appropriate button based on membership
+                        project.isMember ? (
+                          <Link
+                            href={`/projects/${project._id}/board`}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded"
+                          >
+                            View Project
+                          </Link>
+                        ) : (
+                          <Button
+                            onClick={(e) => handleJoinClick(project, e)}
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            <UserPlus className="h-4 w-4 mr-1.5" />
+                            Join
+                          </Button>
+                        )}
                       </div>
                     </div>
-                  </Link>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -426,6 +678,17 @@ function ClientWorkspaceOverview({ workspace }: { workspace: Workspace }) {
           </div>
         </div>
       </div>
+
+      {/* Project Join Dialog */}
+      {selectedProject && (
+        <ProjectJoinDialog
+          projectId={selectedProject._id}
+          projectName={selectedProject.name}
+          isOpen={isJoinDialogOpen}
+          onClose={() => setIsJoinDialogOpen(false)}
+          onSuccess={handleJoinSuccess}
+        />
+      )}
     </div>
   );
 }

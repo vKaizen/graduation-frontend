@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -33,12 +33,13 @@ import {
   fetchGoalById,
   fetchUsers,
   fetchProjects,
-  fetchTasksByWorkspace,
   fetchWorkspaces,
   linkTaskToGoal,
   updateGoal,
   calculateGoalProgress,
   updateProjectStatus,
+  fetchProjectsByWorkspace,
+  fetchTasksByProject,
 } from "@/api-service";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -53,7 +54,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { getAuthCookie } from "@/lib/cookies";
+
 
 export default function GoalDetailsPage() {
   const router = useRouter();
@@ -214,19 +215,41 @@ export default function GoalDetailsPage() {
         );
       }
 
-      // If no workspace ID could be extracted, get all workspaces and use the first one
-      if (
-        !workspaceId ||
-        (typeof workspaceId === "object" && !workspaceId._id && !workspaceId.id)
-      ) {
+      // Ensure workspaceId is a valid MongoDB ID string
+      if (workspaceId) {
+        // If it's an object, extract the ID string
+        if (typeof workspaceId === "object") {
+          workspaceId = workspaceId._id || workspaceId.id;
+        }
+
+        // Validate that it's a proper MongoDB ID format
+        if (!isValidMongoId(workspaceId)) {
+          console.warn(`Invalid workspace ID format: ${workspaceId}`);
+          workspaceId = null; // Reset to null if invalid
+        } else {
+          console.log(`Using validated workspace ID: ${workspaceId}`);
+        }
+      }
+
+      // If no workspace ID could be extracted or it's invalid, get all workspaces and use the first one
+      if (!workspaceId) {
         try {
           console.log(
             "No valid workspace ID found, attempting to fetch all workspaces"
           );
           const workspaces = await fetchWorkspaces();
           if (workspaces && workspaces.length > 0) {
-            workspaceId = workspaces[0]._id;
-            console.log(`Using first workspace ID as fallback: ${workspaceId}`);
+            const firstWorkspaceId = workspaces[0]._id;
+
+            // Validate the fallback workspace ID as well
+            if (isValidMongoId(firstWorkspaceId)) {
+              workspaceId = firstWorkspaceId;
+              console.log(
+                `Using first workspace ID as fallback: ${workspaceId}`
+              );
+            } else {
+              console.error("Fallback workspace ID is also invalid");
+            }
           } else {
             console.error(
               "No workspaces found and goal has no valid workspace ID"
@@ -257,9 +280,46 @@ export default function GoalDetailsPage() {
             workspaceId
           );
           try {
-            // No validation needed here - we'll let the fetchTasksByWorkspace function handle object IDs
-            fetchedTasks = await fetchTasksByWorkspace(workspaceId);
-            console.log(`Successfully fetched ${fetchedTasks.length} tasks`);
+            // Instead of using fetchTasksByWorkspace, get projects first then tasks
+            if (!isValidMongoId(workspaceId)) {
+              console.error(
+                `Cannot fetch projects: Invalid workspace ID format: ${workspaceId}`
+              );
+              throw new Error("Invalid workspace ID format");
+            }
+
+            console.log(
+              `Fetching projects with validated workspace ID: ${workspaceId}`
+            );
+            const projects = await fetchProjectsByWorkspace(workspaceId);
+
+            if (projects && projects.length > 0) {
+              // Fetch tasks for each project and combine them
+              let allTasks: Task[] = [];
+
+              await Promise.all(
+                projects.map(async (project: Project) => {
+                  try {
+                    const projectTasks = await fetchTasksByProject(project._id);
+                    if (projectTasks && projectTasks.length > 0) {
+                      allTasks = [...allTasks, ...projectTasks];
+                    }
+                  } catch (err) {
+                    console.error(
+                      `Error fetching tasks for project ${project._id}:`,
+                      err
+                    );
+                  }
+                })
+              );
+
+              console.log(
+                `Successfully fetched ${allTasks.length} tasks from all projects`
+              );
+              fetchedTasks = allTasks;
+            } else {
+              console.log("No projects found in the workspace");
+            }
           } catch (taskError) {
             console.error(`Error fetching tasks for workspace:`, taskError);
 
@@ -269,7 +329,53 @@ export default function GoalDetailsPage() {
               if (workspaces && workspaces.length > 0) {
                 const firstWorkspace = workspaces[0];
                 console.log(`Using first available workspace as fallback`);
-                fetchedTasks = await fetchTasksByWorkspace(firstWorkspace._id);
+
+                // Use the same approach for the fallback - get projects first, then tasks
+                const firstWorkspaceId = firstWorkspace._id;
+
+                if (!isValidMongoId(firstWorkspaceId)) {
+                  console.error(
+                    `Cannot fetch projects: Invalid fallback workspace ID format: ${firstWorkspaceId}`
+                  );
+                  throw new Error("Invalid fallback workspace ID format");
+                }
+
+                console.log(
+                  `Fetching projects with validated fallback workspace ID: ${firstWorkspaceId}`
+                );
+                const projects = await fetchProjectsByWorkspace(
+                  firstWorkspaceId
+                );
+
+                if (projects && projects.length > 0) {
+                  // Fetch tasks for each project and combine them
+                  let allTasks: Task[] = [];
+
+                  await Promise.all(
+                    projects.map(async (project: Project) => {
+                      try {
+                        const projectTasks = await fetchTasksByProject(
+                          project._id
+                        );
+                        if (projectTasks && projectTasks.length > 0) {
+                          allTasks = [...allTasks, ...projectTasks];
+                        }
+                      } catch (err) {
+                        console.error(
+                          `Error fetching tasks for project ${project._id}:`,
+                          err
+                        );
+                      }
+                    })
+                  );
+
+                  console.log(
+                    `Successfully fetched ${allTasks.length} tasks from fallback workspace`
+                  );
+                  fetchedTasks = allTasks;
+                } else {
+                  console.log("No projects found in the fallback workspace");
+                }
               }
             } catch (fallbackError) {
               console.error(
@@ -609,7 +715,7 @@ export default function GoalDetailsPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#1E1E1E]">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#121212]">
         <div className="text-white mb-4">Loading goal details...</div>
         <Button
           variant="outline"
@@ -624,7 +730,7 @@ export default function GoalDetailsPage() {
 
   if (error || !goal) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#1E1E1E]">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#121212]">
         <div className="text-red-500 mb-4">{error || "Goal not found"}</div>
         <div className="flex space-x-4">
           <Button
@@ -710,15 +816,15 @@ export default function GoalDetailsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#1E1E1E] text-white">
+    <div className="min-h-screen bg-[#121212] text-white">
       {/* Header */}
-      <div className="bg-[#252525] border-b border-[#353535] p-4">
+      <div className="bg-[#1a1a1a] border-b border-[#353535] p-4">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center mb-4">
             <Button
               variant="ghost"
               size="icon"
-              className="text-gray-400 hover:text-white mr-2"
+              className="text-gray-400 hover:text-white mr-2 hover:bg-[#353535]"
               onClick={() => router.push("/insights/goals/my-goals")}
             >
               <ChevronLeft className="h-5 w-5" />
@@ -727,35 +833,14 @@ export default function GoalDetailsPage() {
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div
-                className={`px-3 py-1 rounded-full text-sm ${
-                  goal.status === "on-track"
-                    ? "bg-green-900/30 text-green-400"
-                    : goal.status === "at-risk"
-                    ? "bg-yellow-900/30 text-yellow-400"
-                    : goal.status === "off-track"
-                    ? "bg-red-900/30 text-red-400"
-                    : goal.status === "achieved"
-                    ? "bg-blue-900/30 text-blue-400"
-                    : "bg-gray-900/30 text-gray-400"
-                }`}
-              >
-                {goal.status === "no-status"
-                  ? "No Status"
-                  : goal.status.replace(/-/g, " ")}
-              </div>
+              
               <div className="mx-4 h-4 border-r border-[#353535]"></div>
               <div className="text-sm text-gray-400">
                 {goal.timeframe} {goal.timeframeYear}
               </div>
             </div>
             <div className="flex items-center">
-              <Button
-                variant="outline"
-                className="bg-transparent border-[#353535] text-white hover:bg-[#252525] mr-2"
-              >
-                Edit
-              </Button>
+              
               <Button
                 className="bg-[#4573D2] hover:bg-[#3A62B3]"
                 onClick={handleRecalculateProgress}
@@ -773,7 +858,7 @@ export default function GoalDetailsPage() {
         {/* Left column - Main info */}
         <div className="lg:col-span-2 space-y-6">
           {/* Progress card */}
-          <div className="bg-[#252525] border border-[#353535] rounded-lg p-6">
+          <div className="bg-[#1a1a1a] border border-[#353535] rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Progress</h2>
               <div className="text-3xl font-bold">{goal.progress}%</div>
@@ -861,7 +946,7 @@ export default function GoalDetailsPage() {
                     linkedProjects.map((project) => (
                       <div
                         key={project._id}
-                        className="flex items-center justify-between p-3 bg-[#1E1E1E] rounded-md"
+                        className="flex items-center justify-between p-3 bg-[#121212] rounded-md"
                       >
                         <div className="flex items-center">
                           <div
@@ -928,7 +1013,7 @@ export default function GoalDetailsPage() {
                       .map((task) => (
                         <div
                           key={task._id}
-                          className="flex items-center justify-between p-3 bg-[#1E1E1E] rounded-md"
+                          className="flex items-center justify-between p-3 bg-[#121212] rounded-md"
                         >
                           <div className="flex items-center">
                             <span>{task.title}</span>
@@ -961,7 +1046,7 @@ export default function GoalDetailsPage() {
           </div>
 
           {/* Description card */}
-          <div className="bg-[#252525] border border-[#353535] rounded-lg p-6">
+          <div className="bg-[#1a1a1a] border border-[#353535] rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Description</h2>
             <p className="text-gray-300">
               {goal.description || "No description provided."}
@@ -969,7 +1054,7 @@ export default function GoalDetailsPage() {
           </div>
 
           {/* Comments card */}
-          <div className="bg-[#252525] border border-[#353535] rounded-lg p-6">
+          <div className="bg-[#1a1a1a] border border-[#353535] rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4 flex items-center">
               <MessageSquare className="h-5 w-5 mr-2" />
               Comments
@@ -979,7 +1064,7 @@ export default function GoalDetailsPage() {
               {comments.map((comment) => (
                 <div key={comment.id} className="flex">
                   <Avatar className="h-8 w-8 mr-3">
-                    <AvatarFallback>
+                    <AvatarFallback className="bg-blue-600">
                       {getInitials(comment.user.fullName)}
                     </AvatarFallback>
                   </Avatar>
@@ -1000,7 +1085,7 @@ export default function GoalDetailsPage() {
 
             <div className="flex">
               <Avatar className="h-8 w-8 mr-3">
-                <AvatarFallback>
+                <AvatarFallback className="bg-blue-600">
                   {getInitials(
                     users.find((u) => u._id === authState.userId)?.fullName
                   )}
@@ -1011,7 +1096,7 @@ export default function GoalDetailsPage() {
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   placeholder="Add a comment..."
-                  className="min-h-[80px] bg-[#1E1E1E] border-[#353535] text-white resize-none pr-10"
+                  className="min-h-[80px] bg-[#121212] border-[#353535] text-white resize-none pr-10"
                 />
                 <Button
                   size="icon"
@@ -1029,7 +1114,7 @@ export default function GoalDetailsPage() {
         {/* Right column - Sidebar */}
         <div className="space-y-6">
           {/* Owner and members card */}
-          <div className="bg-[#252525] border border-[#353535] rounded-lg p-6">
+          <div className="bg-[#1a1a1a] border border-[#353535] rounded-lg p-6">
             <h2 className="text-lg font-semibold mb-4">People</h2>
 
             {/* Owner */}
@@ -1037,8 +1122,8 @@ export default function GoalDetailsPage() {
               <h3 className="text-sm text-gray-400 mb-2">Owner</h3>
               {owner ? (
                 <div className="flex items-center">
-                  <Avatar className="h-8 w-8 mr-3 bg-[#f87171]">
-                    <AvatarFallback>
+                  <Avatar className="h-8 w-8 mr-3">
+                    <AvatarFallback className="bg-red-600">
                       {getInitials(owner?.fullName)}
                     </AvatarFallback>
                   </Avatar>
@@ -1056,8 +1141,8 @@ export default function GoalDetailsPage() {
                 <div className="space-y-2">
                   {goalMembers.map((member) => (
                     <div key={member._id} className="flex items-center">
-                      <Avatar className="h-8 w-8 mr-3 bg-[#4573D2]">
-                        <AvatarFallback>
+                      <Avatar className="h-8 w-8 mr-3">
+                        <AvatarFallback className="bg-indigo-600">
                           {getInitials(member.fullName)}
                         </AvatarFallback>
                       </Avatar>
@@ -1074,7 +1159,7 @@ export default function GoalDetailsPage() {
           </div>
 
           {/* Time period card */}
-          <div className="bg-[#252525] border border-[#353535] rounded-lg p-6">
+          <div className="bg-[#1a1a1a] border border-[#353535] rounded-lg p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center">
               <Calendar className="h-5 w-5 mr-2" />
               Time Period
@@ -1102,7 +1187,7 @@ export default function GoalDetailsPage() {
           </div>
 
           {/* Privacy card */}
-          <div className="bg-[#252525] border border-[#353535] rounded-lg p-6">
+          <div className="bg-[#1a1a1a] border border-[#353535] rounded-lg p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center">
               <Users className="h-5 w-5 mr-2" />
               Privacy
@@ -1121,7 +1206,7 @@ export default function GoalDetailsPage() {
 
       {/* Task Selection Modal */}
       <Dialog open={showTasksModal} onOpenChange={setShowTasksModal}>
-        <DialogContent className="bg-[#252525] border-[#353535] text-white sm:max-w-md">
+        <DialogContent className="bg-[#1a1a1a] border-[#353535] text-white sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Connect Tasks to Goal</DialogTitle>
           </DialogHeader>
@@ -1130,7 +1215,7 @@ export default function GoalDetailsPage() {
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Search tasks..."
-                className="pl-8 bg-[#1E1E1E] border-[#353535] text-white"
+                className="pl-8 bg-[#121212] border-[#353535] text-white"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -1146,6 +1231,18 @@ export default function GoalDetailsPage() {
                       className="bg-[#4573D2] hover:bg-[#3A62B3] flex items-center gap-1 pl-2 pr-1 py-1"
                     >
                       {task.title}
+                      {task.project && (
+                        <span className="text-xs opacity-80 mx-1">
+                          (
+                          {typeof task.project === "object" && task.project.name
+                            ? task.project.name
+                            : typeof task.project === "string"
+                            ? projects.find((p) => p._id === task.project)
+                                ?.name || "Unknown"
+                            : "Unknown"}
+                          )
+                        </span>
+                      )}
                       <button
                         onClick={() => toggleItemSelection(id)}
                         className="h-4 w-4 rounded-full flex items-center justify-center hover:bg-[#5a82d8] ml-1"
@@ -1163,7 +1260,7 @@ export default function GoalDetailsPage() {
                 filteredTasks.map((task) => (
                   <div
                     key={task._id}
-                    className="mb-2 p-3 rounded-md bg-[#1E1E1E] border border-[#353535] flex items-center gap-3"
+                    className="mb-2 p-3 rounded-md bg-[#121212] border border-[#353535] flex items-center gap-3"
                   >
                     <Checkbox
                       id={`task-${task._id}`}
@@ -1175,11 +1272,44 @@ export default function GoalDetailsPage() {
                       className="flex-1 cursor-pointer"
                     >
                       <div className="font-medium">{task.title}</div>
-                      {task.description && (
-                        <div className="text-sm text-gray-400 truncate">
-                          {task.description}
-                        </div>
-                      )}
+                      <div className="flex items-center mt-1">
+                        {/* Project badge - handle different possible structures */}
+                        {task.project && (
+                          <div
+                            className="text-xs px-2 py-0.5 rounded-full mr-2"
+                            style={{
+                              backgroundColor:
+                                typeof task.project === "object" &&
+                                task.project.color
+                                  ? `${task.project.color}30`
+                                  : "#4573D230",
+                              color:
+                                typeof task.project === "object" &&
+                                task.project.color
+                                  ? task.project.color
+                                  : "#4573D2",
+                            }}
+                          >
+                            {typeof task.project === "object" &&
+                            task.project.name
+                              ? task.project.name
+                              : typeof task.project === "string"
+                              ? projects.find((p) => p._id === task.project)
+                                  ?.name || "Unknown Project"
+                              : "Unknown Project"}
+                          </div>
+                        )}
+                        {!task.project && (
+                          <div className="text-xs px-2 py-0.5 rounded-full mr-2 bg-gray-800 text-gray-400">
+                            No Project
+                          </div>
+                        )}
+                        {task.description && (
+                          <div className="text-xs text-gray-400 truncate">
+                            {task.description}
+                          </div>
+                        )}
+                      </div>
                     </label>
                   </div>
                 ))
@@ -1215,7 +1345,7 @@ export default function GoalDetailsPage() {
 
       {/* Project Selection Modal */}
       <Dialog open={showProjectsModal} onOpenChange={setShowProjectsModal}>
-        <DialogContent className="bg-[#252525] border-[#353535] text-white sm:max-w-md">
+        <DialogContent className="bg-[#1a1a1a] border-[#353535] text-white sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Connect Projects to Goal</DialogTitle>
           </DialogHeader>
@@ -1224,7 +1354,7 @@ export default function GoalDetailsPage() {
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Search projects..."
-                className="pl-8 bg-[#1E1E1E] border-[#353535] text-white"
+                className="pl-8 bg-[#121212] border-[#353535] text-white"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -1257,7 +1387,7 @@ export default function GoalDetailsPage() {
                 filteredProjects.map((project) => (
                   <div
                     key={project._id}
-                    className="mb-2 p-3 rounded-md bg-[#1E1E1E] border border-[#353535] flex items-center gap-3"
+                    className="mb-2 p-3 rounded-md bg-[#121212] border border-[#353535] flex items-center gap-3"
                   >
                     <div
                       className="w-4 h-4 rounded-full"
@@ -1313,4 +1443,3 @@ export default function GoalDetailsPage() {
     </div>
   );
 }
- 

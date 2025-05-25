@@ -6,9 +6,20 @@ import { Button } from "@/components/ui/button";
 import { BaseCard } from "./BaseCard";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/contexts/workspace-context";
-import { fetchProjectsByWorkspace } from "@/api-service";
+import { fetchProjectsByWorkspace, fetchProjectMembers } from "@/api-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
+import { getUserIdCookie } from "@/lib/cookies";
+
+// Add Project type for better type safety
+interface Project {
+  _id: string;
+  name: string;
+  color: string;
+  description?: string;
+  visibility?: "public" | "invite-only";
+  createdBy?: string;
+}
 
 interface ProjectsCardProps {
   onRemove?: () => void;
@@ -23,7 +34,7 @@ export function ProjectsCard({
   isFullWidth = false,
   onSizeChange,
 }: ProjectsCardProps) {
-  const [projects, setProjects] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -41,11 +52,51 @@ export function ProjectsCard({
       setError(null);
 
       try {
+        // Get current user ID
+        const userId = getUserIdCookie();
+        if (!userId) {
+          setError("User not authenticated");
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch all workspace projects
         const fetchedProjects = await fetchProjectsByWorkspace(
           currentWorkspace._id
         );
-        console.log("Fetched projects:", fetchedProjects);
-        setProjects(fetchedProjects || []);
+
+        // Filter projects where user is a member
+        const userProjects = await Promise.all(
+          fetchedProjects.map(async (project: Project) => {
+            try {
+              // Check if user is the creator (always a member)
+              if (project.createdBy === userId) {
+                return project;
+              }
+
+              // Fetch project members to check membership
+              const members = await fetchProjectMembers(project._id);
+              const isMember = members.some(
+                (member: any) => member._id === userId
+              );
+
+              // Return the project if user is a member, otherwise null
+              return isMember ? project : null;
+            } catch (error) {
+              console.error(
+                `Error checking membership for project ${project.name}:`,
+                error
+              );
+              return null; // Skip projects with errors
+            }
+          })
+        );
+
+        // Filter out null values (projects where user is not a member)
+        const filteredProjects = userProjects.filter(Boolean) as Project[];
+
+        console.log("User's projects:", filteredProjects);
+        setProjects(filteredProjects || []);
       } catch (err) {
         console.error("Error fetching projects:", err);
         setError("Failed to load projects");
@@ -134,7 +185,13 @@ export function ProjectsCard({
               setError(null);
               fetchProjectsByWorkspace(currentWorkspace?._id || "")
                 .then((projects) => {
-                  setProjects(projects || []);
+                  // We'll need to filter for membership again
+                  const userId = getUserIdCookie();
+                  // Just show projects created by the user for a quick retry
+                  const userProjects = projects.filter(
+                    (p: Project) => p.createdBy === userId
+                  );
+                  setProjects(userProjects || []);
                   setIsLoading(false);
                 })
                 .catch((err) => {
@@ -160,18 +217,7 @@ export function ProjectsCard({
       onSizeChange={onSizeChange}
     >
       <div className="h-full flex flex-col">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 mb-4 text-white font-medium hover:bg-white/5 p-2"
-          onClick={handleCreateProject}
-        >
-          <div className="h-10 w-10 rounded flex items-center justify-center border-2 border-dashed border-gray-600">
-            <Plus className="h-5 w-5" />
-          </div>
-          Create project
-        </Button>
-
-        <div className="space-y-2 flex-1 overflow-y-auto">
+        <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
           {projects.length > 0 ? (
             projects.map((project) => (
               <div
@@ -186,17 +232,29 @@ export function ProjectsCard({
                 >
                   {getProjectInitials(project.name)}
                 </div>
-                <span className="text-white">{project.name}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-white block truncate">
+                    {project.name}
+                  </span>
+                  {project.visibility && (
+                    <span
+                      className={`text-xs ${
+                        project.visibility === "invite-only"
+                          ? "text-red-400"
+                          : "text-green-400"
+                      }`}
+                    >
+                      {project.visibility === "invite-only"
+                        ? "Private"
+                        : "Public"}
+                    </span>
+                  )}
+                </div>
               </div>
             ))
           ) : (
             <div className="flex flex-col items-center justify-center p-4 text-center">
               <p className="text-gray-400 mb-2">No projects yet</p>
-              <Link href="/projects/new">
-                <Button variant="outline" size="sm" className="text-white">
-                  Create your first project
-                </Button>
-              </Link>
             </div>
           )}
         </div>

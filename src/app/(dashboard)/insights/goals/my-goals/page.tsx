@@ -74,7 +74,7 @@ export default function MyGoalsPage() {
       workspaceName={currentWorkspace?.name || "My workspace"}
       onCreateGoal={handleCreateGoal}
       showFilter={true}
-      filterText="Filter: My goals"
+      
     >
       {isLoading ? (
         <div className="flex items-center justify-center h-64">

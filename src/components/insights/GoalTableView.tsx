@@ -128,7 +128,7 @@ const GoalRow = ({
           <Tooltip>
             <TooltipTrigger>
               <Avatar className="h-8 w-8 bg-[#4573D2]">
-                <span className="text-xs font-medium text-white">
+                <span className="text-xs font-medium text-white flex items-center justify-center h-full w-full">
                   {goal.owner ? goal.owner.fullName?.charAt(0) || "U" : "U"}
                 </span>
               </Avatar>

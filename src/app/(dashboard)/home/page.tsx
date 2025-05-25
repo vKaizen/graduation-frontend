@@ -26,19 +26,20 @@ type BackgroundColorKey =
 
 // Map color IDs to actual background classes with more vibrant gradients
 const backgroundMap: Record<BackgroundColorKey, string> = {
-  purple: "from-purple-800/80 via-[#1E201E] to-[#1E201E]",
-  orange: "from-orange-500/80 via-[#1E201E] to-[#1E201E]",
-  lime: "from-lime-400/80 via-[#1E201E] to-[#1E201E]",
-  teal: "from-teal-700/80 via-[#1E201E] to-[#1E201E]",
-  turquoise: "from-cyan-500/80 via-[#1E201E] to-[#1E201E]",
-  lightblue: "from-cyan-200/80 via-[#1E201E] to-[#1E201E]",
-  blue: "from-blue-500/80 via-[#1E201E] to-[#1E201E]",
-  lavender: "from-purple-400/80 via-[#1E201E] to-[#1E201E]",
-  purple2: "from-purple-500/80 via-[#1E201E] to-[#1E201E]",
-  pink: "from-pink-300/80 via-[#1E201E] to-[#1E201E]",
-  white: "from-gray-100/80 via-[#1E201E] to-[#1E201E]",
-  black: "from-[#1E201E] via-[#1E201E] to-[#1E201E]",
+  purple: "from-purple-800/80 via-[#121212] to-[#121212]",
+  orange: "from-orange-500/80 via-[#121212] to-[#121212]",
+  lime: "from-lime-400/80 via-[#121212] to-[#121212]",
+  teal: "from-teal-700/80 via-[#121212] to-[#121212]",
+  turquoise: "from-cyan-500/80 via-[#121212] to-[#121212]",
+  lightblue: "from-cyan-200/80 via-[#121212] to-[#121212]",
+  blue: "from-blue-500/80 via-[#121212] to-[#121212]",
+  lavender: "from-purple-400/80 via-[#121212] to-[#121212]",
+  purple2: "from-purple-500/80 via-[#121212] to-[#121212]",
+  pink: "from-pink-300/80 via-[#121212] to-[#121212]",
+  white: "from-gray-100/80 via-[#121212] to-[#121212]",
+  black: "from-[#1E201E] via-[#121212] to-[#121212]",
 };
+
 
 export default function DashboardPage() {
   // States for current and previous background themes

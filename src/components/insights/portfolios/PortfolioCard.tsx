@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Briefcase, ChevronRight, LayoutGrid } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
-import { Portfolio } from "@/types";
+import { Portfolio, Project, Task } from "@/types";
 import { PortfolioStatusBadge } from "./PortfolioStatusBadge";
 import { ProgressIndicator } from "./ProgressIndicator";
+import { getInitials, formatUsername } from "@/lib/user-utils";
+import { fetchTasksByProject, fetchProject } from "@/api-service";
 
 interface PortfolioCardProps {
   portfolio: Portfolio;
@@ -12,18 +14,120 @@ interface PortfolioCardProps {
 }
 
 export const PortfolioCard = ({ portfolio, className }: PortfolioCardProps) => {
+  // State for real progress calculation
+  const [realProgress, setRealProgress] = useState<number>(
+    portfolio.progress || 0
+  );
+  const [isCalculating, setIsCalculating] = useState<boolean>(false);
+  const calculationRef = useRef<boolean>(false);
+
   // Get the count of projects
   const projectCount = Array.isArray(portfolio.projects)
     ? portfolio.projects.length
     : 0;
 
-  // Format the owner name
-  const ownerName =
-    typeof portfolio.owner === "object" && portfolio.owner?.fullName
-      ? portfolio.owner.fullName
-      : "Unknown";
+  // Format the owner name - handle different possible formats
+  let ownerName = "Unknown";
 
-  const ownerInitial = ownerName ? ownerName.charAt(0) : "U";
+  if (typeof portfolio.owner === "object") {
+    if (portfolio.owner?.fullName) {
+      ownerName = portfolio.owner.fullName;
+    } else if (portfolio.owner?.email) {
+      ownerName = formatUsername(portfolio.owner.email);
+    }
+  } else if (typeof portfolio.owner === "string") {
+    // Check if it's an email address
+    if (portfolio.owner.includes("@")) {
+      ownerName = formatUsername(portfolio.owner);
+    } else {
+      // It's likely a user ID
+      ownerName = `User ${portfolio.owner.substring(0, 6)}`;
+    }
+  }
+
+  // Use the utility function for initials
+  const ownerInitial = getInitials(ownerName);
+
+  // Calculate real progress based on task completion
+  useEffect(() => {
+    const calculateRealProgress = async () => {
+      // Prevent concurrent calculations
+      if (calculationRef.current) return;
+      if (projectCount === 0) return;
+
+      calculationRef.current = true;
+      setIsCalculating(true);
+
+      try {
+        // Get project IDs from portfolio
+        const projectIds = Array.isArray(portfolio.projects)
+          ? portfolio.projects.map((p) => (typeof p === "string" ? p : p._id))
+          : [];
+
+        if (projectIds.length === 0) {
+          setRealProgress(0);
+          return;
+        }
+
+        // Track progress for each project
+        const projectProgressMap: Record<string, number> = {};
+        let totalTasks = 0;
+        let completedTasks = 0;
+
+        // Fetch and calculate progress for each project
+        for (const projectId of projectIds) {
+          try {
+            // First make sure we have full project data
+            const projectData = await fetchProject(projectId);
+            if (!projectData) continue;
+
+            // Get all tasks for this project
+            const tasks: Task[] = await fetchTasksByProject(projectId);
+
+            if (tasks && tasks.length > 0) {
+              // Count tasks and completed tasks
+              const projectTotalTasks = tasks.length;
+              const projectCompletedTasks = tasks.filter(
+                (task) => task.completed || task.status === "completed"
+              ).length;
+
+              // Add to totals
+              totalTasks += projectTotalTasks;
+              completedTasks += projectCompletedTasks;
+
+              // Calculate project progress
+              const projectProgress =
+                projectTotalTasks > 0
+                  ? Math.round(
+                      (projectCompletedTasks / projectTotalTasks) * 100
+                    )
+                  : 0;
+
+              projectProgressMap[projectId] = projectProgress;
+            }
+          } catch (error) {
+            console.error(
+              `Error calculating progress for project ${projectId}:`,
+              error
+            );
+          }
+        }
+
+        // Calculate overall progress
+        const calculatedProgress =
+          totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+        setRealProgress(calculatedProgress);
+      } catch (error) {
+        console.error("Error calculating portfolio progress:", error);
+      } finally {
+        setIsCalculating(false);
+        calculationRef.current = false;
+      }
+    };
+
+    calculateRealProgress();
+  }, [portfolio.projects, projectCount]);
 
   return (
     <Link
@@ -59,7 +163,7 @@ export const PortfolioCard = ({ portfolio, className }: PortfolioCardProps) => {
       )}
 
       <div className="mb-4">
-        <ProgressIndicator progress={portfolio.progress} />
+        <ProgressIndicator progress={realProgress} />
       </div>
 
       <div className="flex items-center justify-between">
