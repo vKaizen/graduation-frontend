@@ -1,7 +1,8 @@
 "use client";
 
-import { PlusIcon, Filter, Link as LinkIcon, CalendarIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useRBAC } from "@/hooks/useRBAC";
 
 interface ActionBarProps {
   onCreateGoal?: () => void;
@@ -9,26 +10,30 @@ interface ActionBarProps {
   showCopyLink?: boolean;
   showFilter?: boolean;
   filterText?: string;
+  resourceType?: "goal" | "project" | "portfolio" | "task";
 }
 
 export const ActionBar = ({
   onCreateGoal = () => {},
   showTimePeriodFilter = true,
-  showCopyLink = true,
-  showFilter = false,
-  filterText = "Filter",
+  resourceType = "goal",
 }: ActionBarProps) => {
+  const { checkPermission } = useRBAC();
+  const canCreate = checkPermission("create", resourceType);
+
   return (
     <div className="flex justify-between items-center mb-6">
       <div className="flex items-center">
-        <Button
-          variant="default"
-          className="bg-[#4573D2] hover:bg-[#3A62B3] mr-2 h-10"
-          onClick={onCreateGoal}
-        >
-          <PlusIcon className="h-4 w-4 mr-1" />
-          Create goal
-        </Button>
+        {canCreate && (
+          <Button
+            variant="default"
+            className="bg-[#4573D2] hover:bg-[#3A62B3] mr-2 h-10"
+            onClick={onCreateGoal}
+          >
+            <PlusIcon className="h-4 w-4 mr-1" />
+            Create {resourceType}
+          </Button>
+        )}
 
         {showTimePeriodFilter && (
           <Button
@@ -41,9 +46,7 @@ export const ActionBar = ({
         )}
       </div>
 
-      <div className="flex items-center space-x-2">
-        
-      </div>
+      <div className="flex items-center space-x-2"></div>
     </div>
   );
 };

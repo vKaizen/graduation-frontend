@@ -25,50 +25,7 @@ export const PortfolioTabs: React.FC<PortfolioTabsProps> = ({
             <List className="h-3 w-3 inline mr-1" />
             List
           </button>
-          <button
-            className={`px-3 py-2 text-[13px] font-medium ${
-              activeTab === "timeline"
-                ? "text-blue-500 border-b-2 border-blue-500"
-                : "text-gray-400 hover:text-white"
-            }`}
-            onClick={() => onTabChange("timeline")}
-          >
-            <Calendar className="h-3 w-3 inline mr-1" />
-            Timeline
-          </button>
-          <button
-            className={`px-3 py-2 text-[13px] font-medium ${
-              activeTab === "progress"
-                ? "text-blue-500 border-b-2 border-blue-500"
-                : "text-gray-400 hover:text-white"
-            }`}
-            onClick={() => onTabChange("progress")}
-          >
-            <BarChart2 className="h-3 w-3 inline mr-1" />
-            Progress
-          </button>
-          <button
-            className={`px-3 py-2 text-[13px] font-medium ${
-              activeTab === "workload"
-                ? "text-blue-500 border-b-2 border-blue-500"
-                : "text-gray-400 hover:text-white"
-            }`}
-            onClick={() => onTabChange("workload")}
-          >
-            <Users className="h-3 w-3 inline mr-1" />
-            Workload
-          </button>
-          <button
-            className={`px-3 py-2 text-xs font-medium ${
-              activeTab === "messages"
-                ? "text-blue-500 border-b-2 border-blue-500"
-                : "text-gray-400 hover:text-white"
-            }`}
-            onClick={() => onTabChange("messages")}
-          >
-            <MessageSquare className="h-3 w-3 inline mr-1" />
-            Messages
-          </button>
+          
         </div>
       </div>
     </div>

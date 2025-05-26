@@ -12,6 +12,7 @@ import {
   fetchProjectsByWorkspace,
   fetchGoals,
   addProjectMember,
+  deleteProject,
 } from "@/api-service";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MemberInviteModal } from "@/components/workspace/MemberInviteModal";
@@ -23,6 +24,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getUserIdCookie } from "@/lib/cookies";
+import { useRBAC } from "@/hooks/useRBAC";
+import { ProjectDeleteDialog } from "@/components/workspace/ProjectDeleteDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 
 // Simple loading component
 function WorkspaceLoading() {
@@ -229,16 +239,22 @@ function ClientWorkspaceOverview({
 }: {
   workspace: Workspace;
 }): React.ReactElement {
-  const [members, setMembers] = useState<User[]>([]);
+  const router = useRouter();
   const [projects, setProjects] = useState<ProjectWithMembership[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [members, setMembers] = useState<User[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [isLoadingGoals, setIsLoadingGoals] = useState(true);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [selectedProject, setSelectedProject] =
     useState<ProjectWithMembership | null>(null);
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
-  const router = useRouter();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const { checkPermission } = useRBAC();
+  const canCreateGoal = checkPermission("create", "goal");
+  const canDeleteProject = checkPermission("delete", "project");
 
   useEffect(() => {
     const loadData = async () => {
@@ -297,68 +313,71 @@ function ClientWorkspaceOverview({
   }, [workspace._id]);
 
   const handleCreateGoal = () => {
-    router.push("/goals/new");
+    router.push("/insights/goals/create");
   };
 
   const handleJoinClick = (
     project: ProjectWithMembership,
     e: React.MouseEvent
   ) => {
-    e.preventDefault();
     e.stopPropagation();
+    e.preventDefault();
     setSelectedProject(project);
     setIsJoinDialogOpen(true);
   };
 
+  const handleDeleteClick = (
+    project: ProjectWithMembership,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setSelectedProject(project);
+    setIsDeleteDialogOpen(true);
+  };
+
   const handleJoinSuccess = () => {
-    // Refresh the data after joining
+    setIsJoinDialogOpen(false);
+
     const loadData = async () => {
       try {
-        const [projectsData] = await Promise.all([
-          fetchProjectsByWorkspace(workspace._id),
-        ]);
+        setIsLoading(true);
+        const projectsData = await fetchProjectsByWorkspace(workspace._id);
 
-        // Get current user ID
-        const userId = getUserIdCookie();
+        // Filter and transform projects
+        const transformedProjects = projectsData.map((project: Project) => {
+          // Check if the project has visibility set, default to "public" if not
+          const visibility = project.visibility || "public";
+          return {
+            ...project,
+            isMember: true, // We just joined, so we're now a member
+            visibility,
+          };
+        });
 
-        // Update project membership status without fetching members
-        if (userId) {
-          const updatedProjects = projectsData.map((project) => {
-            const isMember =
-              project.createdBy === userId ||
-              (Array.isArray(project.roles) &&
-                project.roles.some((role) => role.userId === userId));
-
-            const projectWithVisibility = project as ProjectWithVisibility;
-
-            return {
-              ...project,
-              isMember,
-              visibility: projectWithVisibility.visibility || "public",
-            };
-          }) as ProjectWithMembership[];
-
-          setProjects(updatedProjects);
-        } else {
-          // Set projects with no membership if no user ID
-          const defaultProjects = projectsData.map((project) => {
-            const projectWithVisibility = project as ProjectWithVisibility;
-
-            return {
-              ...project,
-              isMember: false,
-              visibility: projectWithVisibility.visibility || "public",
-            };
-          }) as ProjectWithMembership[];
-
-          setProjects(defaultProjects);
-        }
+        setProjects(transformedProjects);
       } catch (error) {
-        console.error("Failed to refresh projects:", error);
+        console.error("Failed to reload projects after joining:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     loadData();
+  };
+
+  const handleDeleteSuccess = () => {
+    setIsDeleteDialogOpen(false);
+
+    // Remove the project from the local state
+    if (selectedProject) {
+      setProjects((prevProjects) =>
+        prevProjects.filter((project) => project._id !== selectedProject._id)
+      );
+    }
+
+    // Clear the selected project
+    setSelectedProject(null);
   };
 
   // Helper function to get status color based on goal status
@@ -445,6 +464,13 @@ function ClientWorkspaceOverview({
                   // Determine if project is private (based on visibility or any other property available)
                   const isPrivate = project.visibility === "invite-only";
 
+                  // Check if user has permission to delete the project
+                  const canDeleteProject = checkPermission(
+                    "delete",
+                    "project",
+                    { project }
+                  );
+
                   return (
                     <div
                       key={project._id}
@@ -480,35 +506,61 @@ function ClientWorkspaceOverview({
                           </div>
                         </div>
 
-                        {/* Button logic - for private projects, only show if user is member */}
-                        {isPrivate ? (
-                          // For private projects, only show button if already a member
-                          project.isMember && (
+                        <div className="flex items-center gap-2">
+                          {/* Button logic - for private projects, only show if user is member */}
+                          {isPrivate ? (
+                            // For private projects, only show button if already a member
+                            project.isMember && (
+                              <Link
+                                href={`/projects/${project._id}/board`}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded"
+                              >
+                                View Project
+                              </Link>
+                            )
+                          ) : // For public projects, show appropriate button based on membership
+                          project.isMember ? (
                             <Link
                               href={`/projects/${project._id}/board`}
                               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded"
                             >
                               View Project
                             </Link>
-                          )
-                        ) : // For public projects, show appropriate button based on membership
-                        project.isMember ? (
-                          <Link
-                            href={`/projects/${project._id}/board`}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded"
-                          >
-                            View Project
-                          </Link>
-                        ) : (
-                          <Button
-                            onClick={(e) => handleJoinClick(project, e)}
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            <UserPlus className="h-4 w-4 mr-1.5" />
-                            Join
-                          </Button>
-                        )}
+                          ) : (
+                            <Button
+                              onClick={(e) => handleJoinClick(project, e)}
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              <UserPlus className="h-4 w-4 mr-1.5" />
+                              Join
+                            </Button>
+                          )}
+
+                          {/* Three dots menu with delete option for admin/owner */}
+                          {canDeleteProject && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-[#a1a1a1] hover:text-white hover:bg-[#353535]"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent className="w-40 bg-[#252525] border-[#353535]">
+                                <DropdownMenuItem
+                                  onClick={(e) => handleDeleteClick(project, e)}
+                                  className="text-red-400 hover:text-red-300 hover:bg-[#353535] cursor-pointer"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Project
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -554,24 +606,32 @@ function ClientWorkspaceOverview({
                     </AvatarFallback>
                   </Avatar>
                 ))}
-                <MemberInviteModal
-                  workspaceId={workspace._id}
-                  projects={projects.map((p) => ({ id: p._id, name: p.name }))}
-                  onInviteSent={() => {
-                    // Reload members data after invitation is sent
-                    const loadMembers = async () => {
-                      try {
-                        const membersData = await fetchWorkspaceMembers(
-                          workspace._id
-                        );
-                        setMembers(membersData);
-                      } catch (error) {
-                        console.error("Failed to reload members data:", error);
-                      }
-                    };
-                    loadMembers();
-                  }}
-                />
+                {checkPermission("edit", "workspace") && (
+                  <MemberInviteModal
+                    workspaceId={workspace._id}
+                    projects={projects.map((p) => ({
+                      id: p._id,
+                      name: p.name,
+                    }))}
+                    onInviteSent={() => {
+                      // Reload members data after invitation is sent
+                      const loadMembers = async () => {
+                        try {
+                          const membersData = await fetchWorkspaceMembers(
+                            workspace._id
+                          );
+                          setMembers(membersData);
+                        } catch (error) {
+                          console.error(
+                            "Failed to reload members data:",
+                            error
+                          );
+                        }
+                      };
+                      loadMembers();
+                    }}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -580,14 +640,16 @@ function ClientWorkspaceOverview({
           <div className="bg-[#1a1a1a] rounded-lg p-4 border border-[#353535]">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-medium text-white">Goals</h2>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-white border-[#353535] bg-[#252525] hover:bg-[#353535] hover:text-white"
-                onClick={handleCreateGoal}
-              >
-                Create goal
-              </Button>
+              {canCreateGoal && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-white border-[#353535] bg-[#252525] hover:bg-[#353535] hover:text-white"
+                  onClick={handleCreateGoal}
+                >
+                  Create goal
+                </Button>
+              )}
             </div>
 
             {isLoadingGoals ? (
@@ -681,13 +743,22 @@ function ClientWorkspaceOverview({
 
       {/* Project Join Dialog */}
       {selectedProject && (
-        <ProjectJoinDialog
-          projectId={selectedProject._id}
-          projectName={selectedProject.name}
-          isOpen={isJoinDialogOpen}
-          onClose={() => setIsJoinDialogOpen(false)}
-          onSuccess={handleJoinSuccess}
-        />
+        <>
+          <ProjectJoinDialog
+            projectId={selectedProject._id}
+            projectName={selectedProject.name}
+            isOpen={isJoinDialogOpen}
+            onClose={() => setIsJoinDialogOpen(false)}
+            onSuccess={handleJoinSuccess}
+          />
+          <ProjectDeleteDialog
+            projectId={selectedProject._id}
+            projectName={selectedProject.name}
+            isOpen={isDeleteDialogOpen}
+            onClose={() => setIsDeleteDialogOpen(false)}
+            onSuccess={handleDeleteSuccess}
+          />
+        </>
       )}
     </div>
   );

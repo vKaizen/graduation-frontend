@@ -80,15 +80,7 @@ export function TaskFilters({ activeFilters, onFilterChange }: TaskFiltersProps)
               <FilterButton filter="Due next week" icon={Clock} />
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-start border-neutral-800 bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-300"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add filter
-            <ChevronDown className="ml-auto h-4 w-4" />
-          </Button>
+          
         </div>
       </PopoverContent>
     </Popover>

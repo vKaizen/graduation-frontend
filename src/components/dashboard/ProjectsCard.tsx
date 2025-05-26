@@ -10,6 +10,13 @@ import { fetchProjectsByWorkspace, fetchProjectMembers } from "@/api-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { getUserIdCookie } from "@/lib/cookies";
+import { useRBAC } from "@/hooks/useRBAC";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Add Project type for better type safety
 interface Project {
@@ -39,6 +46,7 @@ export function ProjectsCard({
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { currentWorkspace } = useWorkspace();
+  const { checkPermission, getPermissionMessage } = useRBAC();
 
   // Fetch projects from the API
   useEffect(() => {
@@ -115,7 +123,13 @@ export function ProjectsCard({
 
   // Navigate to create project page
   const handleCreateProject = () => {
-    router.push("/projects/new");
+    // Check if user has permission to create projects
+    if (checkPermission("create", "project")) {
+      router.push("/projects/new");
+    } else {
+      // Show toast notification for permission denied
+      // This is optional as the create button will be disabled
+    }
   };
 
   // Get project initials for avatar fallback
@@ -143,6 +157,27 @@ export function ProjectsCard({
     // Return mapped color class or default to purple
     return colorMap[hexColor] || "bg-purple-500";
   };
+
+  // Create project button with RBAC
+  const canCreateProject = checkPermission("create", "project");
+  const permissionMessage = getPermissionMessage("create", "project");
+
+  const createProjectButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleCreateProject}
+      className={`mt-4 ${
+        canCreateProject
+          ? "bg-[#4573D2] hover:bg-[#3A62B3]"
+          : "bg-gray-600 cursor-not-allowed"
+      }`}
+      disabled={!canCreateProject}
+    >
+      <Plus className="h-4 w-4 mr-1" />
+      Create Project
+    </Button>
+  );
 
   // Render loading skeleton
   if (isLoading) {

@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 export default function GoalsOverviewPage() {
   const router = useRouter();
+  const hasRedirectedRef = useRef(false);
 
   useEffect(() => {
-    // Redirect to my-goals page
-    router.push("/insights/goals/my-goals");
+    // Only redirect once to avoid infinite loops
+    if (!hasRedirectedRef.current) {
+      hasRedirectedRef.current = true;
+      // Redirect to my-goals page
+      router.push("/insights/goals/my-goals");
+    }
   }, [router]);
 
   return (

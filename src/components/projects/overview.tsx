@@ -14,6 +14,7 @@ import {
   fetchUsers,
 } from "@/api-service";
 import { ProjectMemberAddModal } from "./ProjectMemberAddModal";
+import { useRBAC } from "@/hooks/useRBAC";
 
 interface OverviewProps {
   project: Project;
@@ -31,6 +32,10 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
   const [userMap, setUserMap] = useState<
     Record<string, { email: string; fullName: string }>
   >({});
+
+  // RBAC permissions check
+  const { checkPermission } = useRBAC();
+  const canEditProject = checkPermission("edit", "project", { project });
 
   // Get initials from a name
   const getInitials = (name: string) => {
@@ -83,11 +88,16 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
 
           // Get unique user IDs from project roles
           const userIds = new Set(
-            project.roles.map((role) =>
-              typeof role.userId === "string"
-                ? role.userId
-                : role.userId.toString()
-            )
+            project.roles.map((role) => {
+              // Use type assertion to bypass strict type checking
+              const userId = role.userId as any;
+              if (typeof userId === "string") {
+                return userId;
+              } else if (userId && typeof userId === "object") {
+                return userId._id || userId.toString();
+              }
+              return String(userId);
+            })
           );
 
           // Fetch each user individually
@@ -224,14 +234,16 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
   };
 
   const handleStatusChange = async (status: string) => {
-    if (!project._id) return;
+    if (!project._id || !canEditProject) return;
 
     // Update local state first
     setProjectStatus(status);
 
     try {
       // Update project status in the database
-      await apiUpdateProjectStatus(project._id, { status: status });
+      await apiUpdateProjectStatus(project._id, {
+        status: status as any,
+      });
 
       // Update activity logs
       await refreshActivityLogs();
@@ -246,7 +258,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
   };
 
   const handleDescriptionSave = async () => {
-    if (!project._id) return;
+    if (!project._id || !canEditProject) return;
 
     try {
       // Show loading indicator
@@ -398,15 +410,17 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
                   </Button>
                 </div>
               ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-sm text-neutral-400 hover:text-white"
-                  onClick={() => setIsEditing(true)}
-                >
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
+                canEditProject && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-sm text-neutral-400 hover:text-white"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                )
               )}
             </div>
             {isEditing ? (
@@ -469,6 +483,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
                     : "border-[#353535] text-neutral-400 hover:text-white"
                 }`}
                 onClick={() => handleStatusChange("on-track")}
+                disabled={!canEditProject}
               >
                 <span className="flex items-center">
                   <span className="h-2 w-2 rounded-full bg-green-500 mr-2"></span>
@@ -484,6 +499,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
                     : "border-[#353535] text-neutral-400 hover:text-white"
                 }`}
                 onClick={() => handleStatusChange("at-risk")}
+                disabled={!canEditProject}
               >
                 <span className="flex items-center">
                   <span className="h-2 w-2 rounded-full bg-yellow-500 mr-2"></span>
@@ -499,6 +515,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
                     : "border-[#353535] text-neutral-400 hover:text-white"
                 }`}
                 onClick={() => handleStatusChange("off-track")}
+                disabled={!canEditProject}
               >
                 <span className="flex items-center">
                   <span className="h-2 w-2 rounded-full bg-red-500 mr-2"></span>
@@ -514,6 +531,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
                     : "border-[#353535] text-neutral-400 hover:text-white"
                 }`}
                 onClick={() => handleStatusChange("completed")}
+                disabled={!canEditProject}
               >
                 <span className="flex items-center">
                   <span className="h-2 w-2 rounded-full bg-blue-500 mr-2"></span>
@@ -554,15 +572,21 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
                     </div>
                     <div>
                       <div className="flex items-center text-sm font-medium text-white">
-                        {activity.user &&
-                        typeof activity.user === "object" &&
-                        activity.user.name
-                          ? activity.user.name.includes("@")
-                            ? Object.values(userMap).find(
-                                (u) => u.email === activity.user.name
-                              )?.fullName || activity.user.name
-                            : activity.user.name
-                          : getUserName(activity.user)}
+                        {(() => {
+                          // Use type assertion to bypass strict type checking
+                          const user = activity.user as any;
+                          if (user && typeof user === "object" && user.name) {
+                            if (user.name.includes("@")) {
+                              return (
+                                Object.values(userMap).find(
+                                  (u) => u.email === user.name
+                                )?.fullName || user.name
+                              );
+                            }
+                            return user.name;
+                          }
+                          return getUserName(activity.user);
+                        })()}
                       </div>
                       <p className="text-xs text-neutral-400 mb-1">
                         {activity.content}

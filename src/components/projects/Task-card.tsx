@@ -271,7 +271,7 @@ export function TaskCard({
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0 ml-2 text-neutral-400 hover:text-neutral-300"
+              className="h-8 w-8 p-0 ml-2 text-neutral-400 hover:text-white hover:bg-[#353535]"
               onClick={handleCancel}
             >
               <X className="h-4 w-4" />
@@ -295,25 +295,25 @@ export function TaskCard({
                 <SelectContent className="bg-[#353535] border-[#1a1a1a]">
                   <SelectItem
                     value="High"
-                    className="text-white hover:bg-[#2f2d45]"
+                    className="text-white hover:bg-[#353535]"
                   >
                     High
                   </SelectItem>
                   <SelectItem
                     value="Medium"
-                    className="text-white hover:bg-[#2f2d45]"
+                    className="text-white hover:bg-[#353535]"
                   >
                     Medium
                   </SelectItem>
                   <SelectItem
                     value="Low"
-                    className="text-white hover:bg-[#2f2d45]"
+                    className="text-white hover:bg-[#353535]"
                   >
                     Low
                   </SelectItem>
                   <SelectItem
                     value="none"
-                    className="text-white hover:bg-[#2f2d45]"
+                    className="text-white hover:bg-[#353535]"
                   >
                     None
                   </SelectItem>
@@ -337,31 +337,31 @@ export function TaskCard({
                 <SelectContent className="bg-[#353535] border-[#1a1a1a]">
                   <SelectItem
                     value="not started"
-                    className="text-white hover:bg-[#2f2d45]"
+                    className="text-white hover:bg-[#353535]"
                   >
                     Not started
                   </SelectItem>
                   <SelectItem
                     value="in progress"
-                    className="text-white hover:bg-[#2f2d45]"
+                    className="text-white hover:bg-[#353535]"
                   >
                     In progress
                   </SelectItem>
                   <SelectItem
                     value="on track"
-                    className="text-white hover:bg-[#2f2d45]"
+                    className="text-white hover:bg-[#353535]"
                   >
                     On track
                   </SelectItem>
                   <SelectItem
                     value="at risk"
-                    className="text-white hover:bg-[#2f2d45]"
+                    className="text-white hover:bg-[#353535]"
                   >
                     At risk
                   </SelectItem>
                   <SelectItem
                     value="completed"
-                    className="text-white hover:bg-[#2f2d45]"
+                    className="text-white hover:bg-[#353535]"
                   >
                     Completed
                   </SelectItem>
@@ -429,28 +429,9 @@ export function TaskCard({
               </div>
             </div>
 
-            <div className="col-span-2">
-              <label className="text-xs text-neutral-400 mb-1 block">
-                Tags
-              </label>
-              <Input
-                placeholder="Tags (comma separated)"
-                value={taskData.tags || ""}
-                onChange={(e) =>
-                  setTaskData({ ...taskData, tags: e.target.value })
-                }
-                className="bg-[#353535] border-0 focus-visible:ring-1 focus-visible:ring-neutral-500 text-white placeholder:text-neutral-400 h-8"
-              />
-            </div>
+            
 
-            <Button
-              variant="ghost"
-              size="sm"
-              className="col-span-2 h-8 justify-start text-neutral-400 hover:text-neutral-300 hover:bg-[#353535]/50"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add field
-            </Button>
+            
           </div>
 
           <div className="flex justify-end space-x-2 pt-2">
@@ -458,11 +439,11 @@ export function TaskCard({
               variant="ghost"
               size="sm"
               onClick={handleCancel}
-              className="h-8"
+              className="h-8 text-white bg-[#1a1a1a] hover:bg-[#353535] hover:text-white"
             >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSave} className="h-8">
+            <Button size="sm" onClick={handleSave} className="h-8 text-white bg-[#1a1a1a] hover:bg-[#353535]">
               Save
             </Button>
           </div>
@@ -488,7 +469,7 @@ export function TaskCard({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0 text-neutral-400 hover:text-neutral-300 absolute top-2 right-2"
+                      className="h-6 w-6 p-0 text-neutral-400 hover:bg-[#353535] hover:text-neutral-300 absolute top-2 right-2"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <MoreHorizontal className="h-4 w-4" />
@@ -500,14 +481,14 @@ export function TaskCard({
                     className="w-40 bg-[#1a1a1a] border-[#262626]"
                   >
                     <DropdownMenuItem
-                      className="text-white hover:bg-[#262626] cursor-pointer"
+                      className="text-white focus:bg-[#353535] focus:text-white cursor-pointer"
                       onClick={(e) => {
                         e.stopPropagation();
                         onDuplicate(sectionId, task._id);
                       }}
                     >
                       <svg
-                        className="h-4 w-4 mr-2"
+                        className="h-4 w-4 mr-2 "
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
@@ -528,7 +509,7 @@ export function TaskCard({
                       Duplicate
                     </DropdownMenuItem>
                     <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="text-white hover:bg-[#262626] cursor-pointer">
+                      <DropdownMenuSubTrigger className="text-white hover:bg-[#353535] hover:text-white cursor-pointer">
                         <svg
                           className="h-4 w-4 mr-2"
                           viewBox="0 0 24 24"
@@ -542,9 +523,9 @@ export function TaskCard({
                           <path d="M12 5l7 7-7 7" />
                         </svg>
                         Move to
-                      </DropdownMenuSubTrigger>
+                      </DropdownMenuSubTrigger >
                       <DropdownMenuSubContent
-                        className="bg-[#1a1a1a] border-[#262626]"
+                        className="bg-[#1a1a1a]  border-[#262626]"
                         alignOffset={-5}
                       >
                         {projectSections
@@ -568,7 +549,7 @@ export function TaskCard({
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
                     <DropdownMenuItem
-                      className="text-white hover:bg-[#262626] cursor-pointer text-red-400 hover:text-red-400"
+                      className="text-white focus:bg-[#353535] focus:text-red-500 cursor-pointer text-red-500 hover:text-red-400"
                       onClick={(e) => {
                         e.stopPropagation();
                         onDelete(sectionId, task._id);
@@ -647,7 +628,7 @@ export function TaskCard({
               <div className="flex items-center mt-2">
                 {/* Assignee avatar */}
                 {task.assignee && task.assignee !== "" ? (
-                  <div className="h-6 w-6 rounded-full bg-rose-400 flex items-center justify-center text-white text-xs font-medium">
+                  <div className="h-6 w-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-medium">
                     {getAssigneeName(task.assignee).substring(0, 2)}
                   </div>
                 ) : null}

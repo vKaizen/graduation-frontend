@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { GoalsLayout } from "@/components/insights/GoalsLayout";
 import { GoalTableView } from "@/components/insights/GoalTableView";
@@ -14,67 +14,50 @@ export default function WorkspaceGoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isLoadingRef = useRef(false);
 
   useEffect(() => {
     const loadGoals = async () => {
       if (!currentWorkspace) return;
+      if (isLoadingRef.current) return; // Prevent multiple simultaneous calls
 
-      console.log(
-        "Workspace Goals - Loading goals for workspace:",
-        currentWorkspace._id
-      );
-
+      isLoadingRef.current = true;
       setIsLoading(true);
       setError(null);
 
       try {
-        // Only fetch workspace goals (non-private goals) for the current workspace
+        // Fetch workspace (non-private) goals
         console.log(
-          "Workspace Goals - Fetching non-private goals with params:",
-          {
-            workspaceId: currentWorkspace._id,
-            isPrivate: false,
-          }
+          "Workspace Goals - Fetching goals for workspace:",
+          currentWorkspace._id
         );
-
         const fetchedGoals = await fetchGoals({
           workspaceId: currentWorkspace._id,
           isPrivate: false,
         });
 
-        console.log("Workspace Goals - Fetched goals:", fetchedGoals);
-        console.log("Workspace Goals - Number of goals:", fetchedGoals.length);
-
-        if (fetchedGoals.length > 0) {
-          console.log("Workspace Goals - First goal:", fetchedGoals[0]);
-          console.log(
-            "Workspace Goals - First goal isPrivate:",
-            fetchedGoals[0].isPrivate
-          );
-        }
-
+        console.log(
+          `Workspace Goals - Fetched ${fetchedGoals.length} workspace goals`
+        );
         setGoals(fetchedGoals);
       } catch (err) {
         console.error("Error fetching workspace goals:", err);
         setError("Failed to load workspace goals. Please try again.");
-        // Fallback to empty array
         setGoals([]);
       } finally {
         setIsLoading(false);
+        isLoadingRef.current = false;
       }
     };
 
     loadGoals();
-  }, [currentWorkspace]);
+  }, [currentWorkspace?._id]);
 
   const handleCreateGoal = () => {
-    // Navigate to the new goal creation page
-    router.push("/goals/new");
+    router.push("/goals/new?type=workspace");
   };
 
   const handleGoalClick = (goal: Goal) => {
-    // Navigate to goal details page
-    console.log("Goal clicked:", goal);
     router.push(`/insights/goals/${goal._id}`);
   };
 

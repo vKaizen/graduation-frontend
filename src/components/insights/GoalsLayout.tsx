@@ -13,6 +13,7 @@ interface GoalsLayoutProps {
   showTimePeriodFilter?: boolean;
   showCopyLink?: boolean;
   activeTab?: string;
+  resourceType?: "goal" | "project" | "portfolio" | "task";
 }
 
 export const GoalsLayout = ({
@@ -24,6 +25,7 @@ export const GoalsLayout = ({
   showTimePeriodFilter = true,
   showCopyLink = true,
   activeTab,
+  resourceType = "goal",
 }: GoalsLayoutProps) => {
   return (
     <div className="p-6 text-white bg-[#121212] min-h-full">
@@ -36,6 +38,7 @@ export const GoalsLayout = ({
           filterText={filterText}
           showTimePeriodFilter={showTimePeriodFilter}
           showCopyLink={showCopyLink}
+          resourceType={resourceType}
         />
 
         <div className="mt-6">{children}</div>

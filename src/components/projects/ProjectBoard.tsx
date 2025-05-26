@@ -86,9 +86,7 @@ export function ProjectBoard({ projectId }: Readonly<{ projectId: string }>) {
           <Button variant="ghost" size="sm" className="text-gray-400">
             Sort
           </Button>
-          <Button variant="ghost" size="sm" className="text-gray-400">
-            Group
-          </Button>
+          
           <Button variant="ghost" size="sm" className="text-gray-400">
             <MoreHorizontal className="h-4 w-4" />
           </Button>

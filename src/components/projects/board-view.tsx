@@ -36,6 +36,7 @@ import { getAuthCookie } from "@/lib/cookies";
 import { jwtDecode } from "jwt-decode";
 import { MuiDatePickerComponent } from "@/components/ui/mui-date-picker";
 import { getInitials } from "@/lib/user-utils";
+import { useRBAC } from "@/hooks/useRBAC";
 
 interface BoardViewProps {
   project: Project;
@@ -119,6 +120,10 @@ export function BoardView({
   const [sortBy, setSortBy] = useState<string>("title");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [updateCounter, setUpdateCounter] = useState(0);
+
+  // Check if user has permissions to edit tasks
+  const { checkPermission } = useRBAC();
+  const canEditTasks = checkPermission("edit", "task", { project });
 
   const getAssigneeName = (assigneeId: string | null): string => {
     if (!assigneeId) return "Unassigned";
@@ -507,12 +512,22 @@ export function BoardView({
   };
 
   const handleDeleteTask = async (sectionId: string, taskId: string) => {
+    if (!canEditTasks) {
+      // If user doesn't have permission, don't allow deletion
+      return;
+    }
+
     if (confirm("Are you sure you want to delete this task?")) {
       await deleteTask(sectionId, taskId);
     }
   };
 
   const handleBulkDelete = async () => {
+    if (!canEditTasks) {
+      // If user doesn't have permission, don't allow bulk deletion
+      return;
+    }
+
     setIsLoading(true);
     try {
       await Promise.all(
@@ -699,7 +714,7 @@ export function BoardView({
                   variant="ghost"
                   size="sm"
                   onClick={handleBulkDelete}
-                  disabled={isLoading}
+                  disabled={isLoading || !canEditTasks}
                   className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
                 >
                   {isLoading ? (
@@ -1098,15 +1113,17 @@ export function BoardView({
                     </Draggable>
                   ))}
                   {provided.placeholder}
-                  <Button
-                    key="add-section-button"
-                    variant="ghost"
-                    className="h-10 px-4 border border-dashed border-[#353535] text-neutral-500 hover:text-neutral-400 hover:bg-[#353535]/50 hover:border-neutral-600"
-                    onClick={addSection}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add section
-                  </Button>
+                  {canEditTasks && (
+                    <Button
+                      key="add-section-button"
+                      variant="ghost"
+                      className="h-10 px-4 border border-dashed border-[#353535] text-neutral-500 hover:text-neutral-400 hover:bg-[#353535]/50 hover:border-neutral-600"
+                      onClick={addSection}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add section
+                    </Button>
+                  )}
                 </div>
               </Fragment>
             )}

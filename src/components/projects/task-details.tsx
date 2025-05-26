@@ -576,7 +576,7 @@ export function TaskDetails({
               </div>
             </SheetHeader>
 
-            <div className="flex-1 overflow-y-auto bg-[#1a1a1a]">
+            <div className="flex-1 overflow-y-auto bg-[#121212]">
               {/* Task Title */}
               <div className="px-6 pt-6 pb-2">
                 {isEditing ? (
@@ -633,7 +633,7 @@ export function TaskDetails({
                   <label className="text-sm text-neutral-400">Assignee</label>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2">
-                      <Avatar className="h-6 w-6 bg-blue-600">
+                      <Avatar className="h-6 w-6 bg-blue-600 text-white">
                         <AvatarFallback className="text-xs">
                           {getAssigneeInitials(task.assignee)}
                         </AvatarFallback>
@@ -688,7 +688,7 @@ export function TaskDetails({
                 {/* Project */}
                 <div className="space-y-2">
                   <label className="text-sm text-neutral-400">Projects</label>
-                  <div className="flex items-center gap-2 bg-[#222] px-2 py-1 rounded hover:bg-[#2a2a2a]">
+                  <div className="flex items-center gap-2 bg-[#1a1a1a] px-2 py-1 rounded hover:bg-[#1a1a1a]">
                     {task.project?.color ? (
                       task.project.color.includes("[#") ? (
                         // For custom hex colors like bg-[#fd3939]
@@ -736,31 +736,13 @@ export function TaskDetails({
                   </Button>
                 </div>
 
-                {/* Dependencies */}
-                <div className="space-y-2 bg-[#222] rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm text-neutral-400">
-                      Dependencies
-                    </label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800 h-7 px-2"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add dependency
-                    </Button>
-                  </div>
-                  <div className="text-sm text-neutral-500 italic">
-                    No dependencies added yet
-                  </div>
-                </div>
+                
 
                 {/* Fields */}
                 <div className="space-y-2">
                   <label className="text-sm text-neutral-400">Fields</label>
-                  <div className="space-y-2 bg-[#222] rounded-lg overflow-hidden">
-                    <div className="flex items-center justify-between px-3 py-2 hover:bg-[#2a2a2a]">
+                  <div className="space-y-2 bg-[#1a1a1a] rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 hover:bg-[#1a1a1a]">
                       <div className="flex items-center gap-2">
                         <ChevronRight className="h-4 w-4 text-neutral-500" />
                         <span className="text-sm text-neutral-400">
@@ -784,8 +766,16 @@ export function TaskDetails({
                         <ChevronRight className="h-4 w-4 text-neutral-500" />
                         <span className="text-sm text-neutral-400">Status</span>
                       </div>
-                      <Badge className="bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30">
-                        {task.project?.status || "On track"}
+                      <Badge 
+                        className={cn(
+                          task.status === "completed"
+                            ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                            : task.status === "in progress"
+                            ? "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
+                            : "bg-gray-500/20 text-gray-300 hover:bg-gray-500/30"
+                        )}
+                      >
+                        {task.status || "Not started"}
                       </Badge>
                     </div>
                   </div>
@@ -798,7 +788,7 @@ export function TaskDetails({
                   </label>
                   <Textarea
                     placeholder="What is this task about?"
-                    className="bg-[#353535] border-0 resize-none min-h-[120px] text-neutral-200 text-base"
+                    className="bg-[#1a1a1a] border-0 resize-none min-h-[120px] text-neutral-200 text-base"
                     value={task.description || ""}
                     onChange={(e) =>
                       onUpdate(task._id, {

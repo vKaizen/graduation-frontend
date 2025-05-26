@@ -36,3 +36,5 @@ export default function RequireWorkspacePermission({
   // If user doesn't have permission, render fallback or null
   return fallback ? <>{fallback}</> : null;
 }
+
+

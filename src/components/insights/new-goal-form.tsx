@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,14 +35,22 @@ import { GoalMembersForm } from "./goal-members-form";
 
 export function NewGoalForm() {
   const router = useRouter();
-  const { currentWorkspace } = useWorkspace();
+  const { currentWorkspace, currentRole, hasPermission } = useWorkspace();
   const { authState } = useAuth(); // Get authenticated user from AuthContext
+  const searchParams = useSearchParams();
+  const goalType = searchParams.get("type"); // Get goal type from URL
+
+  // Set default private/workspace based on URL parameter
+  const defaultIsPrivate = goalType !== "workspace";
 
   // Debug log for authentication state
   console.log("NewGoalForm - Auth state:", {
     isAuthenticated: !!authState.accessToken,
     userId: authState.userId,
     username: authState.username,
+    role: currentRole,
+    goalType,
+    defaultIsPrivate,
   });
 
   const [currentStep, setCurrentStep] = useState<"details" | "members">(
@@ -68,8 +76,44 @@ export function NewGoalForm() {
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-  const [isPrivate, setIsPrivate] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(defaultIsPrivate);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [hasWorkspacePermission, setHasWorkspacePermission] = useState(false);
+
+  // RBAC check - verify if user has permission to create workspace goals
+  useEffect(() => {
+    // Only need to check permissions for workspace goals
+    if (goalType === "workspace") {
+      // Check if user has owner or admin role
+      const canCreateWorkspaceGoals = hasPermission(["owner", "admin"]);
+      setHasWorkspacePermission(canCreateWorkspaceGoals);
+
+      if (!canCreateWorkspaceGoals) {
+        setError(
+          "You don't have permission to create workspace goals. Only workspace owners and admins can create them."
+        );
+      } else {
+        // If the goal type is workspace, force isPrivate to false
+        setIsPrivate(false);
+        console.log("Setting goal as workspace goal (non-private)");
+      }
+    } else {
+      // For private goals, everyone has permission
+      setHasWorkspacePermission(true);
+    }
+  }, [goalType, hasPermission, currentRole]);
+
+  // Handle URL parameters on initial load
+  useEffect(() => {
+    // Check if URL has workspace goal parameter
+    if (goalType === "workspace") {
+      setIsPrivate(false);
+      // Set the title prefix for debugging
+      if (!goalTitle) {
+        setGoalTitle("Workspace Goal: ");
+      }
+    }
+  }, [goalType]);
 
   // Time periods
   const TIME_PERIODS = [
@@ -162,21 +206,8 @@ export function NewGoalForm() {
         console.log("Fetched workspace members:", workspaceMembers);
 
         if (workspaceMembers.length > 0) {
-          // Update users list with workspace members to ensure they're available
-          setUsers((prevUsers) => {
-            // Create a map of existing users by ID for quick lookup
-            const userMap = new Map(prevUsers.map((user) => [user._id, user]));
-
-            // Add any workspace members that aren't already in the list
-            workspaceMembers.forEach((member) => {
-              if (!userMap.has(member._id)) {
-                userMap.set(member._id, member);
-              }
-            });
-
-            // Convert map back to array
-            return Array.from(userMap.values());
-          });
+          // Replace the users array with workspace members
+          setUsers(workspaceMembers);
         }
       } catch (error) {
         console.error("Error fetching workspace members:", error);
@@ -227,12 +258,33 @@ export function NewGoalForm() {
       return;
     }
 
+    // Additional RBAC check before submission
+    if (goalType === "workspace" && !hasWorkspacePermission) {
+      setError(
+        "You don't have permission to create workspace goals. Only workspace owners and admins can create them."
+      );
+      return;
+    }
+
     setIsLoading(true);
     setError("");
 
     try {
       console.log("=== STARTING GOAL CREATION ===");
       console.log("Selected members before creation:", selectedMembers);
+      console.log("Goal type:", goalType);
+      console.log("Is private flag:", isPrivate);
+
+      // Ensure isPrivate is set correctly based on goalType
+      const finalIsPrivate = goalType === "workspace" ? false : isPrivate;
+      if (finalIsPrivate !== isPrivate) {
+        console.log(
+          "Correcting isPrivate flag from",
+          isPrivate,
+          "to",
+          finalIsPrivate
+        );
+      }
 
       // Get current user ID - prioritize the authenticated user ID from authState
       const currentUserId = authState.userId || currentUser?._id;
@@ -255,7 +307,7 @@ export function NewGoalForm() {
         ownerId: currentUserId,
         progress: 0, // Start at 0% progress
         status: "no-status",
-        isPrivate: isPrivate,
+        isPrivate: finalIsPrivate,
         timeframe: selectedTimeframe,
         timeframeYear: selectedTimeframeYear,
         workspaceId: selectedWorkspace,
@@ -273,6 +325,7 @@ export function NewGoalForm() {
       console.log("Progress resource:", progressResource);
       console.log("Selected members:", selectedMembers);
       console.log("Members field in goal data:", goalData.members);
+      console.log("Final isPrivate value:", goalData.isPrivate);
 
       const newGoal = await createGoal(goalData);
       console.log("Created goal response:", newGoal);
@@ -280,7 +333,7 @@ export function NewGoalForm() {
       if (newGoal && newGoal._id) {
         // Redirect to the goals page
         router.push(
-          `/insights/goals/${isPrivate ? "my-goals" : "workspace-goals"}`
+          `/insights/goals/${finalIsPrivate ? "my-goals" : "workspace-goals"}`
         );
       } else {
         setError("Failed to create goal");
@@ -330,6 +383,7 @@ export function NewGoalForm() {
         selectedTimeframe={selectedTimeframe}
         selectedTimeframeYear={selectedTimeframeYear}
         progressResource={progressResource}
+        isWorkspaceGoal={goalType === "workspace"}
       />
     );
   }

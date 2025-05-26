@@ -16,6 +16,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface MemberInviteModalProps {
   workspaceId: string;
@@ -31,6 +38,7 @@ export function MemberInviteModal({
   const { authState } = useAuth();
   const [emails, setEmails] = useState<string>("");
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [selectedRole, setSelectedRole] = useState<string>("member");
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [open, setOpen] = useState(false);
@@ -76,14 +84,15 @@ export function MemberInviteModal({
       // Send invites to each user
       const invitePromises = matchedUsers.map((user) => {
         console.log(
-          `Sending invite to ${user.email} with selected projects:`,
+          `Sending invite to ${user.email} with role: ${selectedRole} and selected projects:`,
           selectedProjects
         );
         return createInvite(
           authState.accessToken || "",
           user._id,
           workspaceId,
-          selectedProjects.length > 0 ? selectedProjects : undefined
+          selectedProjects.length > 0 ? selectedProjects : undefined,
+          selectedRole // Pass the selected role to createInvite
         );
       });
 
@@ -94,6 +103,7 @@ export function MemberInviteModal({
       // Reset form
       setEmails("");
       setSelectedProjects([]);
+      setSelectedRole("member");
       setOpen(false);
 
       // Call the callback if provided
@@ -133,6 +143,7 @@ export function MemberInviteModal({
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
+          {/* Email input field */}
           <div className="grid gap-2">
             <Label htmlFor="emails" className="text-[#a1a1a1]">
               Email addresses
@@ -147,15 +158,51 @@ export function MemberInviteModal({
             />
           </div>
 
+          {/* Role selection */}
+          <div className="grid gap-2">
+            <Label htmlFor="role" className="text-[#a1a1a1]">
+              Member role
+            </Label>
+            <Select
+              value={selectedRole}
+              onValueChange={setSelectedRole}
+              disabled={isLoading}
+            >
+              <SelectTrigger
+                id="role"
+                className="bg-[#252525] border-[#353535] text-white focus:ring-[#4573D2] focus:ring-offset-[#1a1a1a]"
+              >
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#252525] border-[#353535] text-white">
+                <SelectItem
+                  value="admin"
+                  className="focus:bg-[#353535] focus:text-white"
+                >
+                  Admin
+                </SelectItem>
+                <SelectItem
+                  value="member"
+                  className="focus:bg-[#353535] focus:text-white"
+                >
+                  Member
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-[#a1a1a1] mt-1">
+              {selectedRole === "admin"
+                ? "Admins can manage workspace settings and members"
+                : "Members can participate in projects but cannot modify workspace settings"}
+            </p>
+          </div>
+
+          {/* Project selection */}
           {projects.length > 0 && (
             <div className="grid gap-2">
               <Label htmlFor="projects" className="text-[#a1a1a1]">
                 Add to projects (optional)
               </Label>
               <div className="space-y-2">
-                <p className="text-sm text-[#a1a1a1]">
-                  Click on projects to select them:
-                </p>
                 <div className="flex flex-wrap gap-2">
                   {projects.map((project) => (
                     <Button

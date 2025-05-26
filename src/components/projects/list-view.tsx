@@ -52,6 +52,7 @@ import { MuiDatePickerComponent } from "@/components/ui/mui-date-picker";
 import { getInitials } from "@/lib/user-utils";
 import { getAuthCookie } from "@/lib/cookies";
 import { jwtDecode } from "jwt-decode";
+import { useRBAC } from "@/hooks/useRBAC";
 
 interface ListViewProps {
   project: Project;
@@ -115,6 +116,10 @@ export function ListView({
   const [isLoading, setIsLoading] = useState(false);
   const [projectMembers, setProjectMembers] = useState<User[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+
+  // Check if user has permissions to edit tasks
+  const { checkPermission } = useRBAC();
+  const canEditTasks = checkPermission("edit", "task", { project });
 
   // Fetch project members when the component mounts
   useEffect(() => {
@@ -456,12 +461,22 @@ export function ListView({
   };
 
   const handleDeleteTask = async (sectionId: string, taskId: string) => {
+    if (!canEditTasks) {
+      // If user doesn't have permission, don't allow deletion
+      return;
+    }
+
     if (confirm("Are you sure you want to delete this task?")) {
       await deleteTask(sectionId, taskId);
     }
   };
 
   const handleBulkDelete = async () => {
+    if (!canEditTasks) {
+      // If user doesn't have permission, don't allow bulk deletion
+      return;
+    }
+
     setIsLoading(true);
     try {
       await Promise.all(
@@ -896,6 +911,7 @@ export function ListView({
                     e.preventDefault();
                     handleDeleteTask(section._id, task._id);
                   }}
+                  disabled={!canEditTasks}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete
@@ -922,7 +938,7 @@ export function ListView({
                 variant="ghost"
                 size="sm"
                 onClick={handleBulkDelete}
-                disabled={isLoading}
+                disabled={isLoading || !canEditTasks}
                 className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
               >
                 {isLoading ? (
@@ -1249,13 +1265,15 @@ export function ListView({
       </DragDropContext>
 
       <div className="mt-1 border-t border-[#252525]">
-        <button
-          onClick={addSection}
-          className="w-full flex items-center gap-2 px-6 py-2 text-neutral-500 hover:text-white hover:bg-[#252525] transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          <span className="text-sm">Add section</span>
-        </button>
+        {canEditTasks && (
+          <button
+            onClick={addSection}
+            className="w-full flex items-center gap-2 px-6 py-2 text-neutral-500 hover:text-white hover:bg-[#252525] transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="text-sm">Add section</span>
+          </button>
+        )}
       </div>
 
       {selectedTask && (

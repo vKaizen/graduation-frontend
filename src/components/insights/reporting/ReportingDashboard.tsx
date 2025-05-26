@@ -602,6 +602,9 @@ export function ReportingDashboard({
           },
           ticks: {
             color: "#cccccc",
+            stepSize: 1,
+            precision: 0,
+            callback: (value) => Math.floor(Number(value)),
           },
         },
         x: {

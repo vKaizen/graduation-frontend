@@ -19,7 +19,7 @@ export default function NotificationsDropdown() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative text-gray-400">
+        <Button variant="ghost" size="icon" className="relative hover:bg-[#353535] hover:text-white text-gray-400">
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <Badge

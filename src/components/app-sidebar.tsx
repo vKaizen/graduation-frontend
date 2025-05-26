@@ -28,6 +28,7 @@ import {
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useAuth } from "@/contexts/AuthContext";
 import { getIsLoggingOut } from "@/contexts/AuthContext";
+import { useProject } from "@/contexts/project-context";
 
 const scrollbarHideClass = `
   scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:none]
@@ -72,6 +73,7 @@ export function AppSidebar() {
   const [loading, setLoading] = useState(true);
   const { currentWorkspace, setCurrentWorkspace, workspaces } = useWorkspace();
   const { authState } = useAuth();
+  const { projectDeleted } = useProject();
 
   // Use a ref to track the current workspace ID for fetch operations
   const currentWorkspaceIdRef = useRef<string | null>(null);
@@ -114,7 +116,7 @@ export function AppSidebar() {
     }
   }, [pathname, workspaces, currentWorkspace, setCurrentWorkspace]);
 
-  // Load projects when workspace changes
+  // Load projects when workspace changes or when a project is deleted
   useEffect(() => {
     const loadProjects = async () => {
       // Skip if we're in the process of logging out
@@ -243,7 +245,12 @@ export function AppSidebar() {
     };
 
     loadProjects();
-  }, [currentWorkspace?._id, authState.userId, authState.accessToken]);
+  }, [
+    currentWorkspace?._id,
+    authState.userId,
+    authState.accessToken,
+    projectDeleted,
+  ]);
 
   // Filter projects to only show those from the current workspace
   const filteredProjects = projects.filter(
@@ -261,7 +268,7 @@ export function AppSidebar() {
         {/* Navigation Items */}
         <nav className="space-y-1 px-2 mt-2">
           <SidebarNavItem href="/home" label="Home" icon={Home} />
-          <SidebarNavItem href="/my-tasks" label="My Tasks" icon={Info} />
+
           <SidebarNavItem href="/inbox" label="Inbox" icon={Inbox} />
         </nav>
 
@@ -269,13 +276,6 @@ export function AppSidebar() {
         <div className="mt-6 px-2">
           <div className="flex items-center justify-between px-3 py-2">
             <span className="text-sm text-gray-400">Insights</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-4 w-4 text-gray-400"
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
           </div>
           <div className="space-y-1 mt-1">
             <SidebarNavItem
@@ -300,16 +300,6 @@ export function AppSidebar() {
         <div className="mt-6">
           <div className="flex items-center justify-between px-5 py-2">
             <span className="text-sm text-gray-400">Projects</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-4 w-4 text-gray-400 hover:text-white"
-              asChild
-            >
-              <Link href="/projects/new">
-                <Plus className="h-3 w-3" />
-              </Link>
-            </Button>
           </div>
 
           {/* Dynamic Projects List with Empty State */}

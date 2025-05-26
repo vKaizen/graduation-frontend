@@ -13,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getAuthCookie } from "@/lib/cookies";
 import { useWorkspace } from "@/contexts/workspace-context";
+import { useRouter } from "next/navigation";
 
 export default function StrategyMapPage() {
   const [rootGoal, setRootGoal] = useState<Goal | null>(null);
@@ -27,6 +28,7 @@ export default function StrategyMapPage() {
   const searchParams = useSearchParams();
   const highlightGoalId = searchParams.get("highlight");
   const { toast } = useToast();
+  const router = useRouter();
 
   console.log("Strategy map component initialized");
 
@@ -70,6 +72,9 @@ export default function StrategyMapPage() {
       // Add workspaceId filter if we have a currentWorkspace
       if (currentWorkspace?._id) {
         options.workspaceId = currentWorkspace._id;
+        console.log("Using workspace ID filter:", currentWorkspace._id);
+      } else {
+        console.warn("No current workspace ID available for filtering goals");
       }
 
       // Only show non-private (workspace) goals in the strategy map
@@ -169,20 +174,8 @@ export default function StrategyMapPage() {
   };
 
   const handleCreateGoal = () => {
-    console.log("Edit goal:");
-    // Set initial values for a new workspace goal
-    setSelectedGoal({
-      _id: "", // Will be filled by the backend
-      title: "",
-      description: "",
-      progress: 0,
-      ownerId: "", // Will be filled by the form
-      status: "no-status",
-      isPrivate: false, // Default to workspace goal for strategy map
-      timeframe: "Q2",
-      workspaceId: currentWorkspace?._id,
-    } as Goal);
-    setIsModalOpen(true);
+    // Navigate to the goal creation page for workspace goals
+    router.push("/goals/new?type=workspace");
   };
 
   const handleEditGoal = (goal: Goal) => {
@@ -257,7 +250,7 @@ export default function StrategyMapPage() {
 
     return (
       <>
-        <div className="mb-4 flex justify-end items-center">
+        <div className="mb-4 flex justify-end items-center ">
           <Button
             variant="outline"
             size="sm"
@@ -265,12 +258,11 @@ export default function StrategyMapPage() {
               console.log("Manual refresh clicked");
               fetchGoals();
             }}
-            className="mr-2"
+            className="mr-2 border-[#353535]"
           >
             <RefreshCw className="h-4 w-4 mr-1" />
             Refresh Map
           </Button>
-          
         </div>
         {rootGoal ? (
           <StrategyMapView

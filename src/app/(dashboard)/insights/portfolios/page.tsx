@@ -1,18 +1,32 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
-import { Plus, Briefcase } from "lucide-react";
+import { Plus, Briefcase, AlertCircle } from "lucide-react";
 import { fetchPortfolios } from "@/api-service";
 import { Portfolio } from "@/types";
 import { PortfolioCard } from "@/components/insights/portfolios/PortfolioCard";
 import { useWorkspace } from "@/contexts/workspace-context";
+import { useRBAC } from "@/hooks/useRBAC";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useRouter } from "next/navigation";
 
 export default function PortfoliosPage() {
   const { currentWorkspace } = useWorkspace();
+  const { checkPermission, getPermissionMessage } = useRBAC();
+  const router = useRouter();
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Check if user has permission to create portfolios
+  const canCreatePortfolio = checkPermission("create", "portfolio");
+  const permissionMessage = getPermissionMessage("create", "portfolio");
 
   // Fetch portfolios
   useEffect(() => {
@@ -41,6 +55,51 @@ export default function PortfoliosPage() {
     loadPortfolios();
   }, [currentWorkspace]);
 
+  // Handle create portfolio button click
+  const handleCreatePortfolio = () => {
+    if (canCreatePortfolio) {
+      router.push("/portfolio");
+    }
+  };
+
+  // Create Portfolio Button with RBAC
+  const CreatePortfolioButton = ({
+    className = "",
+  }: {
+    className?: string;
+  }) => {
+    const buttonContent = (
+      <Button
+        className={`flex items-center ${
+          canCreatePortfolio
+            ? "bg-[#4573D2] hover:bg-[#3a63b8]"
+            : "bg-gray-600 cursor-not-allowed"
+        } text-white px-4 py-2 rounded-md transition-colors ${className}`}
+        onClick={handleCreatePortfolio}
+        disabled={!canCreatePortfolio}
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Create Portfolio
+      </Button>
+    );
+
+    return canCreatePortfolio ? (
+      buttonContent
+    ) : (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
+          <TooltipContent className="bg-[#252525] text-white border-[#353535]">
+            <div className="flex items-center">
+              <AlertCircle className="h-4 w-4 text-orange-400 mr-2" />
+              <p>{permissionMessage}</p>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#121212] pt-8 px-4">
       {/* Header with title and create button */}
@@ -52,13 +111,7 @@ export default function PortfoliosPage() {
           </p>
         </div>
 
-        <Link
-          href="/portfolio"
-          className="flex items-center bg-[#4573D2] text-white px-4 py-2 rounded-md hover:bg-[#3a63b8] transition-colors"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Create Portfolio
-        </Link>
+        <CreatePortfolioButton />
       </div>
 
       <div className="container mx-auto">
@@ -89,13 +142,7 @@ export default function PortfoliosPage() {
               Create your first portfolio to group and monitor multiple projects
               in one view
             </p>
-            <Link
-              href="/portfolio"
-              className="inline-flex items-center bg-[#4573D2] text-white px-4 py-2 rounded-md hover:bg-[#3a63b8] transition-colors"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Portfolio
-            </Link>
+            <CreatePortfolioButton className="inline-flex" />
           </div>
         )}
 

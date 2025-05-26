@@ -263,14 +263,16 @@ export const GoalFormModal = ({
           <div className="grid gap-2">
             <Label htmlFor="parent">Parent Goal (Optional)</Label>
             <Select
-              value={parentGoalId}
-              onValueChange={(value) => setParentGoalId(value || undefined)}
+              value={parentGoalId || "none"}
+              onValueChange={(value) =>
+                setParentGoalId(value === "none" ? undefined : value)
+              }
             >
               <SelectTrigger className="bg-[#252525] border-[#353535]">
                 <SelectValue placeholder="No parent" />
               </SelectTrigger>
               <SelectContent className="bg-[#1a1a1a] border-[#353535] text-white">
-                <SelectItem value="">No parent</SelectItem>
+                <SelectItem value="none">No parent</SelectItem>
                 {parentGoals.map((parentGoal) => (
                   <SelectItem key={parentGoal._id} value={parentGoal._id}>
                     {parentGoal.title}

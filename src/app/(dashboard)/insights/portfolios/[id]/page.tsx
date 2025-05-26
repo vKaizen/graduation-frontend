@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { AlertTriangle, Settings, Trash2 } from "lucide-react";
+import { AlertTriangle, Settings, Trash2, AlertCircle } from "lucide-react";
 import { Portfolio, Project } from "@/types";
 import {
   fetchPortfolioById,
@@ -16,6 +16,13 @@ import Link from "next/link";
 import { PortfolioHeader } from "@/components/insights/portfolios/PortfolioHeader";
 import { PortfolioTabs } from "@/components/insights/portfolios/PortfolioTabs";
 import { PortfolioContent } from "@/components/insights/portfolios/PortfolioContent";
+import { useRBAC } from "@/hooks/useRBAC";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface PortfolioDetailsPageProps {
   params: {
@@ -33,6 +40,7 @@ export default function PortfolioDetailsPage({
 
   const router = useRouter();
   const { toast } = useToast();
+  const { checkPermission, getPermissionMessage } = useRBAC();
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [projectsData, setProjectsData] = useState<Project[]>([]);
@@ -41,6 +49,12 @@ export default function PortfolioDetailsPage({
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("list");
   const [isUpdatingProgress, setIsUpdatingProgress] = useState(false);
+
+  // Check if user has permission to edit/delete portfolios
+  const canEditPortfolio = checkPermission("edit", "portfolio");
+  const canDeletePortfolio = checkPermission("delete", "portfolio");
+  const editPermissionMessage = getPermissionMessage("edit", "portfolio");
+  const deletePermissionMessage = getPermissionMessage("delete", "portfolio");
 
   // Fetch portfolio
   useEffect(() => {
@@ -105,6 +119,16 @@ export default function PortfolioDetailsPage({
   const handleRemoveProject = async (projectId: string) => {
     if (!portfolio) return;
 
+    // Check if user has permission to edit portfolio
+    if (!canEditPortfolio) {
+      toast({
+        title: "Permission Denied",
+        description: editPermissionMessage,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       await removeProjectFromPortfolio(portfolio._id, projectId);
 
@@ -155,6 +179,16 @@ export default function PortfolioDetailsPage({
   const handleDeletePortfolio = async () => {
     if (!portfolio) return;
 
+    // Check if user has permission to delete portfolio
+    if (!canDeletePortfolio) {
+      toast({
+        title: "Permission Denied",
+        description: deletePermissionMessage,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (
       !confirm(
         "Are you sure you want to delete this portfolio? This action cannot be undone."
@@ -193,6 +227,12 @@ export default function PortfolioDetailsPage({
   // Handle progress updates from task calculation
   const handleProgressCalculated = async (progress: number) => {
     if (!portfolio) return;
+
+    // Check if user has permission to edit portfolio
+    if (!canEditPortfolio) {
+      console.log("User doesn't have permission to update portfolio progress");
+      return;
+    }
 
     // Only update if the progress is different from the current value
     if (progress === portfolio.progress) return;
@@ -254,6 +294,75 @@ export default function PortfolioDetailsPage({
     );
   }
 
+  // Create action buttons with RBAC
+  const EditButton = () => {
+    const buttonContent = (
+      <Link
+        href={
+          canEditPortfolio ? `/insights/portfolios/${portfolio._id}/edit` : "#"
+        }
+        className={`${
+          canEditPortfolio
+            ? "bg-[#252525] hover:bg-[#303030]"
+            : "bg-gray-600 cursor-not-allowed"
+        } text-white p-1.5 rounded-full`}
+        title="Edit Portfolio"
+        onClick={(e) => !canEditPortfolio && e.preventDefault()}
+      >
+        <Settings className="h-4 w-4" />
+      </Link>
+    );
+
+    return canEditPortfolio ? (
+      buttonContent
+    ) : (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
+          <TooltipContent className="bg-[#252525] text-white border-[#353535]">
+            <div className="flex items-center">
+              <AlertCircle className="h-4 w-4 text-orange-400 mr-2" />
+              <p>{editPermissionMessage}</p>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  const DeleteButton = () => {
+    const buttonContent = (
+      <button
+        onClick={canDeletePortfolio ? handleDeletePortfolio : undefined}
+        className={`${
+          canDeletePortfolio
+            ? "bg-red-600 hover:bg-red-700"
+            : "bg-gray-600 cursor-not-allowed"
+        } text-white p-1.5 rounded-full`}
+        title="Delete Portfolio"
+        disabled={isDeleting || !canDeletePortfolio}
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    );
+
+    return canDeletePortfolio ? (
+      buttonContent
+    ) : (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
+          <TooltipContent className="bg-[#252525] text-white border-[#353535]">
+            <div className="flex items-center">
+              <AlertCircle className="h-4 w-4 text-orange-400 mr-2" />
+              <p>{deletePermissionMessage}</p>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#121212] flex flex-col">
       {/* Fixed header */}
@@ -281,21 +390,8 @@ export default function PortfolioDetailsPage({
 
       {/* Buttons for edit/delete functionality */}
       <div className="fixed bottom-3 right-3 flex flex-col space-y-1.5">
-        <Link
-          href={`/insights/portfolios/${portfolio._id}/edit`}
-          className="bg-[#252525] hover:bg-[#303030] text-white p-1.5 rounded-full"
-          title="Edit Portfolio"
-        >
-          <Settings className="h-4 w-4" />
-        </Link>
-        <button
-          onClick={handleDeletePortfolio}
-          className="bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-full"
-          title="Delete Portfolio"
-          disabled={isDeleting}
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <EditButton />
+        <DeleteButton />
       </div>
     </div>
   );

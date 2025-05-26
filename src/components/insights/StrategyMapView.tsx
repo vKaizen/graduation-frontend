@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Info } from 'lucide-react';
-import { fetchGoalHierarchy } from "@/api-service";
-import { Goal } from "@/types";
+import { Info } from "lucide-react";
+import {
+  fetchGoalHierarchy,
+  fetchProjects,
+  fetchTasks,
+  fetchTasksByProject,
+} from "@/api-service";
+import { Goal, GoalStatus, GoalTimeframe, Project, Task } from "@/types";
 import ReactFlow, {
   Node,
   Edge,
@@ -11,18 +16,27 @@ import ReactFlow, {
   Background,
   useNodesState,
   useEdgesState,
-  MiniMap,
   Panel,
   MarkerType,
   NodeTypes,
   Position,
   getBezierPath,
+  EdgeProps,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { useRouter } from "next/navigation";
 import { StrategyMapNode } from "./StrategyMapNode";
 
-// Dynamic spacing calculation function with increased spacing for goals
+// Enhanced spacing calculation specifically for goal nodes (middle layer)
+const calculateGoalSpacing = (itemCount: number, minSpacing: number = 600) => {
+  if (itemCount <= 1) return minSpacing;
+  if (itemCount <= 2) return Math.max(minSpacing, 800);
+  if (itemCount <= 3) return Math.max(minSpacing, 900);
+  if (itemCount <= 4) return Math.max(minSpacing, 1000);
+  if (itemCount <= 5) return Math.max(minSpacing, 1100);
+  return Math.max(minSpacing, 1200);
+};
+
+// Dynamic spacing calculation function
 const calculateSpacing = (itemCount: number, minSpacing: number = 400) => {
   if (itemCount <= 1) return minSpacing;
   if (itemCount <= 3) return Math.max(minSpacing, 500);
@@ -30,26 +44,18 @@ const calculateSpacing = (itemCount: number, minSpacing: number = 400) => {
   return Math.max(minSpacing, 700);
 };
 
-// Enhanced spacing calculation specifically for goal nodes (middle layer)
-const calculateGoalSpacing = (itemCount: number, minSpacing: number = 600) => {
-  if (itemCount <= 1) return minSpacing;
-  if (itemCount <= 2) return Math.max(minSpacing, 800);  // Increased from 500 to 800
-  if (itemCount <= 3) return Math.max(minSpacing, 900);  // Increased from 600 to 900
-  if (itemCount <= 4) return Math.max(minSpacing, 1000); // Increased from 700 to 1000
-  if (itemCount <= 5) return Math.max(minSpacing, 1100); // New tier
-  return Math.max(minSpacing, 1200); // Increased maximum spacing
-};
-
 // Calculate adaptive vertical spacing based on bottom layer width
-const calculateAdaptiveSpacing = (bottomLayerWidth: number, goalLayerWidth: number) => {
+const calculateAdaptiveSpacing = (
+  bottomLayerWidth: number,
+  goalLayerWidth: number
+) => {
   const baseSpacing = 300;
-  const widthRatio = bottomLayerWidth / Math.max(goalLayerWidth, 1000); // Prevent division by zero
-  
-  // If bottom layer is much wider than goal layer, increase vertical spacing
+  const widthRatio = bottomLayerWidth / Math.max(goalLayerWidth, 1000);
+
   if (widthRatio > 2) {
-    return baseSpacing + (widthRatio - 2) * 100; // Add 100px for each ratio unit above 2
+    return baseSpacing + (widthRatio - 2) * 100;
   }
-  
+
   return baseSpacing;
 };
 
@@ -63,7 +69,7 @@ const CustomEdge = ({
   sourcePosition,
   targetPosition,
   style = {},
-}) => {
+}: EdgeProps) => {
   const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
@@ -77,8 +83,8 @@ const CustomEdge = ({
     <path
       id={id}
       style={{
-        stroke: "red",
-        strokeWidth: 5,
+        stroke: "#4573D2",
+        strokeWidth: 2,
         strokeDasharray: "5,5",
         ...style,
       }}
@@ -91,7 +97,7 @@ const CustomEdge = ({
 
 // Define node types with our custom node component
 const nodeTypes: NodeTypes = {
-  goalNode: StrategyMapNode, // Use your original StrategyMapNode
+  goalNode: StrategyMapNode,
 };
 
 // Define edge types
@@ -100,8 +106,7 @@ const edgeTypes = {
 };
 
 // Configuration flags
-const USE_TEST_MODE = false; // Set to true to use minimal test case
-const USE_SVG_OVERLAY = false; // Set to false to disable SVG overlay
+const USE_TEST_MODE = false;
 
 interface StrategyMapViewProps {
   initialRootGoal?: Goal;
@@ -112,9 +117,7 @@ interface StrategyMapViewProps {
 
 export const StrategyMapView = ({
   initialRootGoal,
-  highlightGoalId,
   onEditGoal,
-  onCreateGoal,
 }: StrategyMapViewProps) => {
   const [loading, setLoading] = useState(true);
   const [rootGoal, setRootGoal] = useState<Goal | null>(
@@ -123,28 +126,104 @@ export const StrategyMapView = ({
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [debugMode, setDebugMode] = useState(false);
+  const [projectsMap, setProjectsMap] = useState<Record<string, Project>>({});
+  const [tasksMap, setTasksMap] = useState<Record<string, Task>>({});
 
   // Memoize nodeTypes to prevent render loops
   const memoizedNodeTypes = useMemo(() => nodeTypes, []);
   const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
 
+  // Function to toggle expand/collapse state
+  const handleToggleExpand = (nodeId: string) => {
+    // This function is now a no-op since we're showing all nodes
+    console.log(
+      `Toggle expand called for node ${nodeId} but ignored as all nodes are shown`
+    );
+  };
+
   // Default edge options for all edges
   const defaultEdgeOptions = {
-    type: "custom", // Use our custom edge type
-    animated: true, // Make it animated for visibility
+    type: "custom",
+    animated: true,
     style: {
-      stroke: "red",
-      strokeWidth: 5,
-      strokeDasharray: "5,5", // Add dashed line for visibility
+      stroke: "#4573D2",
+      strokeWidth: 2,
+      strokeDasharray: "5,5",
     },
     markerEnd: {
       type: MarkerType.ArrowClosed,
-      color: "red",
+      color: "#4573D2",
       width: 20,
       height: 20,
     },
     zIndex: 9999,
   };
+
+  // Fetch projects and tasks data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch all projects
+        console.log("Fetching projects...");
+        const projects = await fetchProjects();
+        console.log(`Fetched ${projects.length} projects:`, projects);
+
+        // Create a map of project ID to project data
+        const projectsMapData = projects.reduce((map, project) => {
+          map[project._id] = project;
+          return map;
+        }, {} as Record<string, Project>);
+
+        setProjectsMap(projectsMapData);
+        console.log(
+          "Projects map created with",
+          Object.keys(projectsMapData).length,
+          "entries"
+        );
+
+        // Determine which workspace ID to use for fetching tasks
+        let workspaceId: string | undefined;
+
+        // If we have a rootGoal with a workspace, use that workspace ID
+        if (rootGoal && rootGoal.workspace && rootGoal.workspace._id) {
+          workspaceId = rootGoal.workspace._id;
+          console.log(`Using workspace ID from rootGoal: ${workspaceId}`);
+        }
+        // Otherwise, use the first project's workspace ID if available
+        else if (projects.length > 0 && projects[0].workspaceId) {
+          workspaceId = projects[0].workspaceId;
+          console.log(`Using workspace ID from first project: ${workspaceId}`);
+        }
+
+        // Fetch all tasks with error handling
+        console.log("Fetching tasks...");
+        try {
+          const tasks = await fetchTasks(workspaceId);
+          console.log(`Fetched ${tasks.length} tasks:`, tasks);
+
+          // Create a map of task ID to task data
+          const tasksMapData = tasks.reduce((map, task) => {
+            map[task._id] = task;
+            return map;
+          }, {} as Record<string, Task>);
+
+          setTasksMap(tasksMapData);
+          console.log(
+            "Tasks map created with",
+            Object.keys(tasksMapData).length,
+            "entries"
+          );
+        } catch (taskError) {
+          console.error("Error fetching tasks:", taskError);
+          console.log("Continuing with empty tasks map");
+        }
+      } catch (error) {
+        console.error("Error fetching projects:", error);
+      }
+    };
+
+    fetchData();
+  }, [rootGoal]);
 
   // Test mode for minimal case
   useEffect(() => {
@@ -152,7 +231,7 @@ export const StrategyMapView = ({
       const testNodes = [
         {
           id: "test-1",
-          type: "goalNode", // Use our node type
+          type: "goalNode",
           position: { x: 250, y: 100 },
           data: { label: "Test Node 1", title: "Test Node 1" },
           sourcePosition: Position.Bottom,
@@ -160,7 +239,7 @@ export const StrategyMapView = ({
         },
         {
           id: "test-2",
-          type: "goalNode", // Use our node type
+          type: "goalNode",
           position: { x: 250, y: 300 },
           data: { label: "Test Node 2", title: "Test Node 2" },
           sourcePosition: Position.Bottom,
@@ -189,28 +268,24 @@ export const StrategyMapView = ({
 
   // Fetch goal hierarchy from API
   useEffect(() => {
-    if (USE_TEST_MODE) return; // Skip if in test mode
+    if (USE_TEST_MODE) return;
 
     const getGoals = async () => {
       try {
         setLoading(true);
         if (!initialRootGoal) {
           console.log("Fetching goal hierarchy from API");
-          // Only fetch non-private (workspace) goals for the strategy map
-          // Include projects and tasks for the progress source layer
           const hierarchyData = await fetchGoalHierarchy({
             isPrivate: false,
             includeProjects: true,
             includeTasks: true,
           });
 
-          // We want to use real data even if it doesn't have children
           if (Array.isArray(hierarchyData) && hierarchyData.length > 0) {
             console.log(
               "Retrieved goal hierarchy with root goal:",
               hierarchyData[0]._id
             );
-            // Perform a deep clone to avoid reference issues
             const rootGoalCopy = JSON.parse(JSON.stringify(hierarchyData[0]));
             setRootGoal(rootGoalCopy);
           } else {
@@ -221,16 +296,22 @@ export const StrategyMapView = ({
               description: "",
               progress: 0,
               isPrivate: false,
+              ownerId: "system",
+              status: "no-status" as GoalStatus,
+              timeframe: "custom" as GoalTimeframe,
               workspace: {
                 _id: "workspace",
                 name: "My Workspace",
+                owner: "system",
+                members: [],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
               },
               children: [],
             });
           }
         } else {
           console.log("Using provided initialRootGoal");
-          // Use initialRootGoal regardless of children
           const rootGoalCopy = JSON.parse(JSON.stringify(initialRootGoal));
           setRootGoal(rootGoalCopy);
         }
@@ -242,9 +323,16 @@ export const StrategyMapView = ({
           description: "",
           progress: 0,
           isPrivate: false,
+          ownerId: "system",
+          status: "no-status" as GoalStatus,
+          timeframe: "custom" as GoalTimeframe,
           workspace: {
             _id: "workspace",
             name: "My Workspace",
+            owner: "system",
+            members: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           },
           children: [],
         });
@@ -256,330 +344,474 @@ export const StrategyMapView = ({
     getGoals();
   }, [initialRootGoal, USE_TEST_MODE]);
 
-  // Transform goals to nodes and edges whenever rootGoal or collapsed state changes
+  // Replace the useEffect that transforms goals to nodes and edges with a version that handles async operations
   useEffect(() => {
-    if (USE_TEST_MODE) return; // Skip if in test mode
+    if (USE_TEST_MODE) return;
 
-    if (rootGoal) {
-      try {
-        console.log("Transforming goal data to nodes and edges");
-        console.log("Root goal:", rootGoal);
-        console.log("Goals (children):", rootGoal.children);
+    const transformGoalsToNodes = async () => {
+      if (rootGoal) {
+        try {
+          console.log("Transforming goal data to nodes and edges");
+          console.log("Root goal:", rootGoal);
+          console.log("Goals (children):", rootGoal.children);
+          console.log("Projects map:", projectsMap);
+          console.log("Tasks map:", tasksMap);
 
-        // Create nodes and edges
-        const strategyNodes: Node[] = [];
-        const strategyEdges: Edge[] = [];
+          const strategyNodes: Node[] = [];
+          const strategyEdges: Edge[] = [];
 
-        // Get all goals (direct children of workspace)
-        const goals = rootGoal.children || [];
-        console.log(`Found ${goals.length} goals:`, goals);
+          const goals = rootGoal.children || [];
+          console.log(`Found ${goals.length} goals:`, goals);
 
-        // Calculate horizontal layout for goals with ENHANCED spacing
-        const GOALS_LEVEL_Y = 250;
-        const GOALS_SPACING = calculateGoalSpacing(goals.length); // Using enhanced spacing function
+          const GOALS_LEVEL_Y = 250;
+          const GOALS_SPACING = calculateGoalSpacing(goals.length);
 
-        // Calculate the total width needed for all goals
-        const totalGoalWidth = goals.length * GOALS_SPACING;
-        // Start position should center the goals array
-        let startX = 400 - totalGoalWidth / 2 + GOALS_SPACING / 2;
+          const totalGoalWidth = goals.length * GOALS_SPACING;
+          let startX = 400 - totalGoalWidth / 2 + GOALS_SPACING / 2;
 
-        if (goals.length === 1) {
-          // If only one goal, center it below the root
-          startX = 400;
-        }
-
-        // First pass: Calculate total bottom layer nodes and their required width
-        let totalBottomNodes = 0;
-        goals.forEach((goal) => {
-          if (goal.progressResource === "projects" && goal.projects && goal.projects.length > 0) {
-            totalBottomNodes += goal.projects.length;
-          } else if (goal.progressResource === "tasks" && goal.linkedTasks && goal.linkedTasks.length > 0) {
-            totalBottomNodes += goal.linkedTasks.length;
+          if (goals.length === 1) {
+            startX = 400;
           }
-        });
 
-        // Calculate bottom layer spacing and total width
-        const bottomSpacing = calculateSpacing(totalBottomNodes, 450);
-        const totalBottomWidth = totalBottomNodes * bottomSpacing;
+          // Calculate total bottom layer nodes (always show all nodes)
+          let totalBottomNodes = 0;
+          goals.forEach((goal) => {
+            if (
+              goal.progressResource === "projects" &&
+              goal.projects &&
+              goal.projects.length > 0
+            ) {
+              totalBottomNodes += goal.projects.length;
+            } else if (
+              goal.progressResource === "tasks" &&
+              goal.linkedTasks &&
+              goal.linkedTasks.length > 0
+            ) {
+              totalBottomNodes += goal.linkedTasks.length;
+            }
+          });
 
-        // Calculate adaptive vertical spacing based on width comparison
-        const adaptiveVerticalSpacing = calculateAdaptiveSpacing(totalBottomWidth, totalGoalWidth);
-        const PROGRESS_SOURCE_LEVEL_Y = GOALS_LEVEL_Y + adaptiveVerticalSpacing;
+          const bottomSpacing = calculateSpacing(totalBottomNodes, 450);
+          const totalBottomWidth = totalBottomNodes * bottomSpacing;
+          const adaptiveVerticalSpacing = calculateAdaptiveSpacing(
+            totalBottomWidth,
+            totalGoalWidth
+          );
+          const PROGRESS_SOURCE_LEVEL_Y =
+            GOALS_LEVEL_Y + adaptiveVerticalSpacing;
 
-        console.log(`Goal layer: ${goals.length} nodes, spacing: ${GOALS_SPACING}px, total width: ${totalGoalWidth}px`);
-        console.log(`Bottom layer: ${totalBottomNodes} nodes, width: ${totalBottomWidth}px`);
-        console.log(`Adaptive vertical spacing: ${adaptiveVerticalSpacing}px`);
+          console.log(
+            `Goal layer: ${goals.length} nodes, spacing: ${GOALS_SPACING}px, total width: ${totalGoalWidth}px`
+          );
+          console.log(
+            `Bottom layer: ${totalBottomNodes} visible nodes, width: ${totalBottomWidth}px`
+          );
+          console.log(
+            `Adaptive vertical spacing: ${adaptiveVerticalSpacing}px`
+          );
 
-        // Calculate root position (center of goals)
-        const rootX = goals.length > 0 ? startX + (goals.length - 1) * GOALS_SPACING / 2 : 400;
+          const rootX =
+            goals.length > 0
+              ? startX + ((goals.length - 1) * GOALS_SPACING) / 2
+              : 400;
 
-        // Create workspace root node (centered above goals)
-        const rootNode: Node = {
-          id: "workspace-root",
-          type: "goalNode",
-          position: { x: rootX, y: 50 },
-          data: {
-            isRoot: true,
-            title: rootGoal.workspace?.name || "My workspace",
-            description: "",
-            progress: 0,
-            _id: "workspace-root",
-            onEdit: null,
-          },
-          targetPosition: Position.Top,
-          sourcePosition: Position.Bottom,
-        };
-
-        strategyNodes.push(rootNode);
-
-        // Create goal nodes
-        goals.forEach((goal, index) => {
-          const x = startX + index * GOALS_SPACING;
-          const node: Node = {
-            id: goal._id,
+          // Create workspace root node
+          const rootNode: Node = {
+            id: "workspace-root",
             type: "goalNode",
-            position: { x, y: GOALS_LEVEL_Y },
+            position: { x: rootX, y: 50 },
             data: {
-              ...goal,
-              ownerName: goal.owner?.fullName || goal.ownerId,
-              onEdit: () =>
-                onEditGoal && onEditGoal({ ...goal, isPrivate: false }),
+              isRoot: true,
+              title: rootGoal.workspace?.name || "My workspace",
+              description: "",
+              progress: 0,
+              _id: "workspace-root",
+              onEdit: null,
             },
             targetPosition: Position.Top,
             sourcePosition: Position.Bottom,
           };
 
-          strategyNodes.push(node);
+          strategyNodes.push(rootNode);
 
-          // Create simple edge from workspace to this goal with explicit styling
-          strategyEdges.push({
-            id: `workspace-root-${goal._id}`,
-            source: "workspace-root",
-            target: goal._id,
-            animated: true,
-            type: "custom",
-            style: {
-              stroke: "red",
-              strokeWidth: 5,
-              strokeDasharray: "5,5",
-            },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color: "red",
-              width: 20,
-              height: 20,
-            },
-            zIndex: 9999,
-          });
+          // Create goal nodes
+          for (const goal of goals) {
+            const index = goals.indexOf(goal);
+            const x = startX + index * GOALS_SPACING;
 
-          if (
-            goal.progressResource === "projects" &&
-            goal.projects &&
-            goal.projects.length > 0
-          ) {
-            // Create project nodes for this goal
-            const projects = Array.isArray(goal.projects) ? goal.projects : [];
+            // Check if this goal has children
+            const hasChildren =
+              (goal.progressResource === "projects" &&
+                goal.projects &&
+                goal.projects.length > 0) ||
+              (goal.progressResource === "tasks" &&
+                goal.linkedTasks &&
+                goal.linkedTasks.length > 0);
 
-            // If we have projects to display
-            if (projects.length > 0) {
-              // Calculate spacing for projects under this goal with dynamic spacing
-              const projectSpacing = calculateSpacing(projects.length, 450);
-              const totalProjectWidth = projects.length * projectSpacing;
-              let projectStartX =
-                x - totalProjectWidth / 2 + projectSpacing / 2;
+            // Always treat as expanded
+            const isExpanded = true;
 
-              // If only one project, center it below the goal
-              if (projects.length === 1) {
-                projectStartX = x;
+            const goalNode: Node = {
+              id: goal._id,
+              type: "goalNode",
+              position: { x, y: GOALS_LEVEL_Y },
+              data: {
+                ...goal,
+                ownerName: goal.owner?.fullName || goal.ownerId,
+                onEdit: () =>
+                  onEditGoal && onEditGoal({ ...goal, isPrivate: false }),
+                hasChildren,
+                isExpanded,
+                onToggleExpand: handleToggleExpand,
+              },
+              targetPosition: Position.Top,
+              sourcePosition: Position.Bottom,
+            };
+
+            strategyNodes.push(goalNode);
+
+            // Create edge from workspace to this goal
+            strategyEdges.push({
+              id: `workspace-root-${goal._id}`,
+              source: "workspace-root",
+              target: goal._id,
+              animated: true,
+              type: "custom",
+              style: {
+                stroke: "#4573D2",
+                strokeWidth: 2,
+                strokeDasharray: "5,5",
+              },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: "#4573D2",
+                width: 20,
+                height: 20,
+              },
+              zIndex: 9999,
+            });
+
+            // Always create child nodes (no longer checking if expanded)
+            console.log(`Goal ${goal._id} checking for projects and tasks`);
+            console.log(`Goal progress resource: ${goal.progressResource}`);
+            console.log(
+              `Projects: ${goal.projects ? goal.projects.length : 0}, Tasks: ${
+                goal.linkedTasks ? goal.linkedTasks.length : 0
+              }`
+            );
+
+            if (
+              goal.progressResource === "projects" &&
+              goal.projects &&
+              goal.projects.length > 0
+            ) {
+              const projectIds = goal.projects;
+              console.log(
+                `Processing ${projectIds.length} projects for goal ${goal._id}`
+              );
+              console.log("Project IDs:", projectIds);
+
+              if (projectIds.length > 0) {
+                const projectSpacing = calculateSpacing(projectIds.length, 450);
+                const totalProjectWidth = projectIds.length * projectSpacing;
+                let projectStartX =
+                  x - totalProjectWidth / 2 + projectSpacing / 2;
+
+                if (projectIds.length === 1) {
+                  projectStartX = x;
+                }
+
+                projectIds.forEach((projectId, projectIndex) => {
+                  // Get the project data from the map
+                  const projectData = projectsMap[projectId] || {
+                    _id: projectId,
+                    name: `Project ${projectIndex + 1}`,
+                    description: "",
+                    color: "#4573D2",
+                    status: "on-track",
+                    progress: 0,
+                  };
+
+                  console.log(`Project ${projectIndex} data:`, projectData);
+
+                  const projectX =
+                    projectStartX + projectIndex * projectSpacing;
+                  const projectNodeId = `project-${projectId}`;
+
+                  const projectNode: Node = {
+                    id: projectNodeId,
+                    type: "goalNode",
+                    position: { x: projectX, y: PROGRESS_SOURCE_LEVEL_Y },
+                    data: {
+                      _id: projectNodeId,
+                      title: projectData.name || `Project ${projectIndex + 1}`,
+                      description: projectData.description || "",
+                      status: projectData.status || "on-track",
+                      isProject: true,
+                    },
+                    targetPosition: Position.Top,
+                    sourcePosition: Position.Bottom,
+                  };
+
+                  strategyNodes.push(projectNode);
+
+                  strategyEdges.push({
+                    id: `${goal._id}-${projectNodeId}`,
+                    source: goal._id,
+                    target: projectNodeId,
+                    animated: true,
+                    type: "custom",
+                    style: {
+                      stroke: "#4573D2",
+                      strokeWidth: 2,
+                      strokeDasharray: "5,5",
+                    },
+                    markerEnd: {
+                      type: MarkerType.ArrowClosed,
+                      color: "#4573D2",
+                      width: 20,
+                      height: 20,
+                    },
+                    zIndex: 9999,
+                  });
+                });
               }
+            } else if (
+              goal.progressResource === "tasks" &&
+              goal.linkedTasks &&
+              goal.linkedTasks.length > 0
+            ) {
+              const taskIds = goal.linkedTasks;
+              console.log(
+                `Processing ${taskIds.length} tasks for goal ${goal._id}`
+              );
+              console.log("Task IDs:", taskIds);
 
-              // Create project nodes
-              projects.forEach((project, projectIndex) => {
-                // Handle both string IDs and object references
-                const projectId =
-                  typeof project === "string" ? project : project._id;
-                const projectData =
-                  typeof project === "string"
-                    ? {
-                        _id: project,
-                        title: `Project ${projectIndex + 1}`,
-                        progress: 0,
+              if (taskIds.length > 0) {
+                const taskSpacing = calculateSpacing(taskIds.length, 450);
+                const totalTaskWidth = taskIds.length * taskSpacing;
+                let taskStartX = x - totalTaskWidth / 2 + taskSpacing / 2;
+
+                if (taskIds.length === 1) {
+                  taskStartX = x;
+                }
+
+                // First try to get tasks from the map
+                const tasksFromMap = taskIds
+                  .map((id) => tasksMap[id])
+                  .filter(Boolean);
+
+                let tasksToUse: Task[];
+
+                if (tasksFromMap.length === taskIds.length) {
+                  // We have all tasks in the map, use those
+                  console.log("All tasks found in map, using cached data");
+                  tasksToUse = tasksFromMap;
+                } else {
+                  // We're missing some tasks, try to fetch them
+                  console.log("Some tasks not in map, fetching from projects");
+
+                  // Fetch all projects to look for tasks
+                  const projects = await fetchProjects();
+
+                  if (projects.length === 0) {
+                    console.log("No projects found to fetch tasks from");
+                    tasksToUse = tasksFromMap;
+                  } else {
+                    // Create a set of task IDs we need to find
+                    const remainingTaskIds = new Set(
+                      taskIds.filter((id) => !tasksMap[id])
+                    );
+
+                    console.log(
+                      `Looking for ${remainingTaskIds.size} missing tasks in ${projects.length} projects`
+                    );
+
+                    // For each project, try to fetch its tasks
+                    const foundTasks: Task[] = [...tasksFromMap];
+
+                    for (const project of projects) {
+                      if (remainingTaskIds.size === 0) break;
+
+                      console.log(`Fetching tasks for project ${project._id}`);
+                      const projectTasks = await fetchTasksByProject(
+                        project._id
+                      );
+
+                      for (const task of projectTasks) {
+                        if (remainingTaskIds.has(task._id)) {
+                          console.log(
+                            `Found missing task ${task._id} in project ${project._id}`
+                          );
+                          foundTasks.push(task);
+                          remainingTaskIds.delete(task._id);
+                        }
                       }
-                    : project;
+                    }
 
-                const projectX = projectStartX + projectIndex * projectSpacing;
-                const projectNodeId = `project-${projectId}`;
+                    console.log(
+                      `Found ${foundTasks.length} out of ${taskIds.length} tasks`
+                    );
+                    tasksToUse = foundTasks;
+                  }
+                }
 
-                const projectNode: Node = {
-                  id: projectNodeId,
-                  type: "goalNode",
-                  position: { x: projectX, y: PROGRESS_SOURCE_LEVEL_Y },
-                  data: {
-                    _id: projectNodeId,
-                    title:
-                      projectData.title ||
-                      projectData.name ||
-                      `Project ${projectIndex + 1}`,
-                    description: projectData.description || "",
-                    progress: projectData.progress || 0,
-                    isProject: true,
-                  },
-                  targetPosition: Position.Top,
-                  sourcePosition: Position.Bottom,
-                };
+                // Create a map for quick lookup
+                const tasksById = tasksToUse.reduce((map, task) => {
+                  map[task._id] = task;
+                  return map;
+                }, {} as Record<string, Task>);
 
-                strategyNodes.push(projectNode);
+                // For each task ID, create a node
+                taskIds.forEach((taskId, taskIndex) => {
+                  // Get the task data if we have it
+                  const taskData = tasksById[taskId];
 
-                // Connect goal to this project
-                strategyEdges.push({
-                  id: `${goal._id}-${projectNodeId}`,
-                  source: goal._id,
-                  target: projectNodeId,
-                  animated: true,
-                  type: "custom",
-                  style: {
-                    stroke: "red",
-                    strokeWidth: 5,
-                    strokeDasharray: "5,5",
-                  },
-                  markerEnd: {
-                    type: MarkerType.ArrowClosed,
-                    color: "red",
-                    width: 20,
-                    height: 20,
-                  },
-                  zIndex: 9999,
-                });
-              });
-            }
-          } else if (
-            goal.progressResource === "tasks" &&
-            goal.linkedTasks &&
-            goal.linkedTasks.length > 0
-          ) {
-            // Create task nodes for this goal
-            const tasks = Array.isArray(goal.linkedTasks)
-              ? goal.linkedTasks
-              : [];
+                  // If we don't have the task data, use default
+                  const displayTaskData = taskData || {
+                    _id: taskId,
+                    title: `Task ${taskIndex + 1}`,
+                    description: "",
+                    status: "not started",
+                    completed: false,
+                  };
 
-            // If we have tasks to display
-            if (tasks.length > 0) {
-              // Calculate spacing for tasks under this goal with dynamic spacing
-              const taskSpacing = calculateSpacing(tasks.length, 450);
-              const totalTaskWidth = tasks.length * taskSpacing;
-              let taskStartX = x - totalTaskWidth / 2 + taskSpacing / 2;
+                  console.log(`Task ${taskIndex} data:`, displayTaskData);
+                  console.log(
+                    `Task ${taskIndex} title:`,
+                    displayTaskData.title
+                  );
+                  console.log(
+                    `Task ${taskIndex} title type:`,
+                    typeof displayTaskData.title
+                  );
 
-              // If only one task, center it below the goal
-              if (tasks.length === 1) {
-                taskStartX = x;
-              }
+                  const taskX = taskStartX + taskIndex * taskSpacing;
+                  const taskNodeId = `task-${taskId}`;
 
-              // Create task nodes
-              tasks.forEach((task, taskIndex) => {
-                // Handle both string IDs and object references
-                const taskId = typeof task === "string" ? task : task._id;
-                const taskData =
-                  typeof task === "string"
-                    ? { _id: task, title: `Task ${taskIndex + 1}`, progress: 0 }
-                    : task;
+                  // Determine the task status
+                  let taskStatus = "not started";
+                  if (displayTaskData.status) {
+                    taskStatus = displayTaskData.status;
+                  } else if (displayTaskData.completed) {
+                    taskStatus = "completed";
+                  }
 
-                const taskX = taskStartX + taskIndex * taskSpacing;
-                const taskNodeId = `task-${taskId}`;
+                  // Get the task title in a simpler way
+                  let taskTitle = `Task ${taskIndex + 1}`;
 
-                const taskNode: Node = {
-                  id: taskNodeId,
-                  type: "goalNode",
-                  position: { x: taskX, y: PROGRESS_SOURCE_LEVEL_Y },
-                  data: {
+                  // Use displayTaskData.title if it exists, otherwise use default
+                  if (displayTaskData.title) {
+                    // Convert to string if needed
+                    taskTitle = String(displayTaskData.title);
+                  }
+
+                  // Create the node data
+                  const nodeData = {
                     _id: taskNodeId,
-                    title: taskData.title || `Task ${taskIndex + 1}`,
-                    description: taskData.description || "",
-                    progress: taskData.completed ? 100 : 0,
-                    isTask: true, // New property to indicate it's a task
-                  },
-                  targetPosition: Position.Top,
-                  sourcePosition: Position.Bottom,
-                };
+                    title: taskTitle,
+                    description: displayTaskData.description || "",
+                    status: taskStatus,
+                    isTask: true,
+                    priority: displayTaskData.priority,
+                    dueDate: displayTaskData.dueDate,
+                    progress: 0, // Add progress property which might be required
+                  };
 
-                strategyNodes.push(taskNode);
+                  console.log(`Task ${taskIndex} node data:`, nodeData);
+                  console.log(`Task ${taskIndex} node title:`, nodeData.title);
 
-                // Connect goal to this task
-                strategyEdges.push({
-                  id: `${goal._id}-${taskNodeId}`,
-                  source: goal._id,
-                  target: taskNodeId,
-                  animated: true,
-                  type: "custom",
-                  style: {
-                    stroke: "red",
-                    strokeWidth: 5,
-                    strokeDasharray: "5,5",
-                  },
-                  markerEnd: {
-                    type: MarkerType.ArrowClosed,
-                    color: "red",
-                    width: 20,
-                    height: 20,
-                  },
-                  zIndex: 9999,
+                  const taskNode: Node = {
+                    id: taskNodeId,
+                    type: "goalNode",
+                    position: { x: taskX, y: PROGRESS_SOURCE_LEVEL_Y },
+                    data: nodeData,
+                    targetPosition: Position.Top,
+                    sourcePosition: Position.Bottom,
+                  };
+
+                  console.log(`Final task node:`, taskNode);
+                  console.log(`Final task node data:`, taskNode.data);
+                  console.log(`Final task node title:`, taskNode.data.title);
+
+                  strategyNodes.push(taskNode);
+
+                  strategyEdges.push({
+                    id: `${goal._id}-${taskNodeId}`,
+                    source: goal._id,
+                    target: taskNodeId,
+                    animated: true,
+                    type: "custom",
+                    style: {
+                      stroke: "#4573D2",
+                      strokeWidth: 2,
+                      strokeDasharray: "5,5",
+                    },
+                    markerEnd: {
+                      type: MarkerType.ArrowClosed,
+                      color: "#4573D2",
+                      width: 20,
+                      height: 20,
+                    },
+                    zIndex: 9999,
+                  });
                 });
-              });
+              }
             }
           }
-        });
 
-        // If we have no goals, add a placeholder node
-        if (goals.length === 0) {
-          // Create a placeholder node showing that there are no goals yet
-          const placeholderNode: Node = {
-            id: "placeholder",
-            type: "goalNode",
-            position: { x: 400, y: GOALS_LEVEL_Y },
-            data: {
-              _id: "placeholder",
-              title: "No workspace goals yet",
-              description: "Create workspace goals to see them here",
-              progress: 0,
-              isPlaceholder: true, // custom flag for this type of node
-            },
-            targetPosition: Position.Top,
-          };
+          // If we have no goals, add a placeholder node
+          if (goals.length === 0) {
+            const placeholderNode: Node = {
+              id: "placeholder",
+              type: "goalNode",
+              position: { x: 400, y: GOALS_LEVEL_Y },
+              data: {
+                _id: "placeholder",
+                title: "No workspace goals yet",
+                description: "Create workspace goals to see them here",
+                progress: 0,
+                isPlaceholder: true,
+              },
+              targetPosition: Position.Top,
+            };
 
-          strategyNodes.push(placeholderNode);
+            strategyNodes.push(placeholderNode);
 
-          // Create edge from workspace to placeholder with explicit styling
-          strategyEdges.push({
-            id: "workspace-root-placeholder",
-            source: "workspace-root",
-            target: "placeholder",
-            animated: true,
-            type: "custom",
-            style: {
-              stroke: "red",
-              strokeWidth: 5,
-              strokeDasharray: "5,5",
-            },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color: "red",
-              width: 20,
-              height: 20,
-            },
-            zIndex: 9999,
-          });
+            strategyEdges.push({
+              id: "workspace-root-placeholder",
+              source: "workspace-root",
+              target: "placeholder",
+              animated: true,
+              type: "custom",
+              style: {
+                stroke: "#4573D2",
+                strokeWidth: 2,
+                strokeDasharray: "5,5",
+              },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: "#4573D2",
+                width: 20,
+                height: 20,
+              },
+              zIndex: 9999,
+            });
+          }
+
+          console.log("Final nodes:", strategyNodes);
+          console.log("Final edges:", strategyEdges);
+
+          setNodes(strategyNodes);
+          setEdges(strategyEdges);
+        } catch (error) {
+          console.error("Error transforming goals to nodes:", error);
         }
-
-        console.log("Nodes:", strategyNodes);
-        console.log("Edges:", strategyEdges);
-
-        // Set nodes and edges
-        setNodes(strategyNodes);
-        setEdges(strategyEdges);
-      } catch (error) {
-        console.error("Error transforming goals to nodes:", error);
       }
-    }
-  }, [rootGoal, onEditGoal, USE_TEST_MODE]);
+    };
+
+    transformGoalsToNodes();
+  }, [rootGoal, onEditGoal, USE_TEST_MODE, projectsMap, tasksMap]);
 
   if (loading) {
     return (
@@ -610,12 +842,16 @@ export const StrategyMapView = ({
             workspace goals (visible to all members) are displayed here. Private
             goals are not shown.
           </p>
-          <button
-            onClick={() => setDebugMode(!debugMode)}
-            className="ml-auto py-1 px-2 bg-gray-700 text-xs rounded hover:bg-gray-600"
-          >
-            {debugMode ? "Hide Debug" : "Debug"}
-          </button>
+
+          {/* Debug button only */}
+          <div className="ml-auto">
+            <button
+              onClick={() => setDebugMode(!debugMode)}
+              className="py-1 px-2 bg-gray-700 text-xs rounded hover:bg-gray-600"
+            >
+              {debugMode ? "Hide Debug" : "Debug"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -632,12 +868,6 @@ export const StrategyMapView = ({
             <p className="text-gray-400">
               Nodes: {nodes.length}, Edges: {edges.length}
             </p>
-            <p className="text-gray-400">
-              Node Types: {nodes.map((n) => n.type).join(", ")}
-            </p>
-            <pre className="text-gray-500 mt-2">
-              {JSON.stringify(nodes[0] || {}, null, 2)}
-            </pre>
           </div>
         </div>
       )}
@@ -673,21 +903,6 @@ export const StrategyMapView = ({
           className="with-edge-lines"
         >
           <Controls showInteractive={false} position="bottom-right" />
-          <MiniMap
-            nodeStrokeWidth={3}
-            nodeColor={(node) => {
-              // Use different colors for different node types
-              if (node.id === "workspace-root") return "#1E1E1E";
-              if (node.data?.isProject) return "#212121";
-              const progress = node.data?.progress || 0;
-              if (progress >= 100) return "#4caf50";
-              if (progress >= 70) return "#8bc34a";
-              if (progress >= 30) return "#ff9800";
-              return "#f44336";
-            }}
-            maskColor="rgba(0, 0, 0, 0.3)"
-            position="bottom-left"
-          />
           <Background color="#353535" gap={16} />
           <Panel
             position="top-left"

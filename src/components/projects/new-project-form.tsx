@@ -66,7 +66,7 @@ export function NewProjectForm() {
         setWorkspaces(workspaceData);
 
         // If the current workspace is available from the context, use it
-        if (currentWorkspace) {
+        if (currentWorkspace && currentWorkspace._id) {
           setSelectedWorkspace(currentWorkspace._id);
         }
         // Otherwise, if there are workspaces, select the first one by default
@@ -86,8 +86,16 @@ export function NewProjectForm() {
       }
     };
 
-    loadWorkspaces();
-  }, [currentWorkspace]);
+    // Use a flag to prevent multiple calls
+    let isMounted = true;
+    if (isMounted) {
+      loadWorkspaces();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSubmit = async () => {
     if (!projectName.trim()) return;

@@ -1,16 +1,6 @@
 "use client";
 
-import {
-  Edit,
-  CheckCircle,
-  Circle,
-  TargetIcon,
-  PlusCircle,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  ClipboardList,
-} from "lucide-react";
+import { TargetIcon, PlusCircle, ClipboardList } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/avatar";
 import { Goal, GoalStatus } from "@/types";
@@ -22,7 +12,7 @@ interface StrategyMapNodeProps {
     title: string;
     description?: string;
     progress: number;
-    status?: GoalStatus;
+    status?: GoalStatus | string;
     timeframe?: string;
     timeframeYear?: number;
     ownerName?: string;
@@ -34,24 +24,11 @@ interface StrategyMapNodeProps {
     isTask?: boolean;
     isPlaceholder?: boolean;
     children?: StrategyMapNodeProps["data"][];
+    color?: string;
+    priority?: string;
+    dueDate?: string;
   };
 }
-
-// Helper function to get status indicator
-const getStatusIndicator = (status: GoalStatus | undefined) => {
-  switch (status) {
-    case "on-track":
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-    case "at-risk":
-      return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-    case "off-track":
-      return <AlertTriangle className="h-4 w-4 text-red-500" />;
-    case "no-status":
-      return <Clock className="h-4 w-4 text-gray-400" />;
-    default:
-      return null;
-  }
-};
 
 export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
   const router = useRouter();
@@ -79,7 +56,7 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
           }}
         />
 
-        <div className="bg-[#272727] border border-[#454545] border-dashed rounded-lg p-4 w-[230px] h-[150px] flex flex-col items-center justify-center relative shadow-md text-center">
+        <div className="bg-[#121212] border border-[#454545] border-dashed rounded-lg p-4 w-[230px] h-[150px] flex flex-col items-center justify-center relative shadow-md text-center">
           <PlusCircle className="h-5 w-5 text-[#4573D2] mb-2" />
           <div className="text-sm font-medium mb-1 text-center text-gray-300">
             {data.title}
@@ -123,6 +100,9 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
 
   // Project node
   if (data.isProject) {
+    // Set progress to 100 if status is completed, otherwise 0
+    const projectProgress = data.status === "completed" ? 100 : 0;
+
     return (
       <>
         {/* Add Handle for target (top) */}
@@ -152,22 +132,17 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
         />
 
         <div
-          className="bg-[#212121] border border-[#353535] hover:border-[#4573D2] rounded-lg p-4 w-[280px] h-[180px] flex flex-col relative cursor-pointer shadow-md hover:shadow-lg transition-all duration-200"
+          className="bg-[#1a1a1a] border border-[#353535] hover:border-[#4573D2] rounded-lg p-4 w-[280px] h-[180px] flex flex-col relative cursor-pointer shadow-md hover:shadow-lg transition-all duration-200"
           onClick={handleNodeClick}
         >
           <div className="flex items-center justify-between mb-2">
             <div className="bg-[#4573D2] px-2 py-0.5 rounded text-xs text-white">
               Project
             </div>
-            {data.progress >= 100 ? (
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            ) : (
-              <Circle className="h-4 w-4 text-gray-400" />
-            )}
           </div>
 
-          <div className="text-sm font-medium mb-3 text-white line-clamp-2">
-            {data.title}
+          <div className="text-sm font-medium mb-2 text-white line-clamp-2">
+            {data.title || "No Title"}
           </div>
 
           <div className="text-xs text-gray-400 mb-3 min-h-[2.5rem] line-clamp-2">
@@ -179,19 +154,18 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
             <div
               className="h-1.5 rounded-full"
               style={{
-                width: `${data.progress}%`,
+                width: `${projectProgress}%`,
                 backgroundColor:
-                  data.progress >= 70
-                    ? "#4caf50"
-                    : data.progress >= 30
-                    ? "#ff9800"
-                    : "#f44336",
+                  projectProgress === 100 ? "#4caf50" : "#353535",
               }}
             ></div>
           </div>
 
           <div className="flex items-center justify-between text-xs text-gray-400">
-            <div>{data.progress}% complete</div>
+            <div>{projectProgress}% complete</div>
+            <div className="bg-[#262626] px-2 py-0.5 rounded capitalize">
+              {data.status || "No Status"}
+            </div>
           </div>
         </div>
       </>
@@ -200,6 +174,16 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
 
   // Task node
   if (data.isTask) {
+    // Add debugging
+    console.log("StrategyMapNode - Task node data:", data);
+    console.log("StrategyMapNode - Task title:", data.title);
+    console.log("StrategyMapNode - Task title type:", typeof data.title);
+
+    // For tasks, we use a different status type (string)
+    const taskStatus = data.status as string;
+    // Set progress to 100 if status is completed, otherwise 0
+    const taskProgress = taskStatus === "completed" ? 100 : 0;
+
     return (
       <>
         {/* Add Handle for target (top) */}
@@ -216,7 +200,7 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
         />
 
         <div
-          className="bg-[#1E1E1E] border border-[#353535] hover:border-[#45D2A3] rounded-lg p-4 w-[280px] h-[180px] flex flex-col relative cursor-pointer shadow-md hover:shadow-lg transition-all duration-200"
+          className="bg-[#1a1a1a] border border-[#353535] hover:border-[#45D2A3] rounded-lg p-4 w-[280px] h-[180px] flex flex-col relative cursor-pointer shadow-md hover:shadow-lg transition-all duration-200"
           onClick={handleNodeClick}
         >
           <div className="flex items-center justify-between mb-2">
@@ -224,15 +208,10 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
               <ClipboardList className="h-3 w-3 mr-1" />
               <span>Task</span>
             </div>
-            {data.progress >= 100 ? (
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            ) : (
-              <Circle className="h-4 w-4 text-gray-400" />
-            )}
           </div>
 
-          <div className="text-sm font-medium mb-3 text-white line-clamp-2">
-            {data.title}
+          <div className="text-sm font-medium  text-white ">
+            {data.title || "No Title"}
           </div>
 
           <div className="text-xs text-gray-400 mb-3 min-h-[2.5rem] line-clamp-2">
@@ -244,15 +223,31 @@ export const StrategyMapNode = ({ data }: StrategyMapNodeProps) => {
             <div
               className="h-1.5 rounded-full"
               style={{
-                width: `${data.progress}%`,
-                backgroundColor: data.progress >= 100 ? "#4caf50" : "#353535",
+                width: `${taskProgress}%`,
+                backgroundColor: taskProgress === 100 ? "#4caf50" : "#353535",
               }}
             ></div>
           </div>
 
           <div className="flex items-center justify-between text-xs text-gray-400">
-            <div>{data.progress >= 100 ? "Completed" : "Incomplete"}</div>
+            <div className="bg-[#262626] px-2 py-0.5 rounded capitalize">
+              {taskStatus === "completed"
+                ? "Completed"
+                : taskStatus === "in progress"
+                ? "In Progress"
+                : "Not Started"}
+            </div>
+            {data.priority && (
+              <div className="px-2 py-0.5 bg-[#262626] rounded">
+                {data.priority}
+              </div>
+            )}
           </div>
+          {data.dueDate && (
+            <div className="text-xs text-gray-500 mt-2">
+              Due: {new Date(data.dueDate).toLocaleDateString()}
+            </div>
+          )}
         </div>
       </>
     );

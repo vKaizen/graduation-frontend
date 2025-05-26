@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { GoalsLayout } from "@/components/insights/GoalsLayout";
 import { GoalTableView } from "@/components/insights/GoalTableView";
@@ -16,11 +16,14 @@ export default function MyGoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isLoadingRef = useRef(false);
 
   useEffect(() => {
     const loadGoals = async () => {
       if (!currentWorkspace || !authState.userId) return;
+      if (isLoadingRef.current) return; // Prevent multiple simultaneous calls
 
+      isLoadingRef.current = true;
       console.log("My Goals - Loading goals for user:", authState.userId);
       console.log("My Goals - Current workspace:", currentWorkspace._id);
 
@@ -29,16 +32,17 @@ export default function MyGoalsPage() {
 
       try {
         // Fetch all private goals in the workspace
-        // The backend will automatically filter by the current user's ID from the JWT token
+        // Include explicit userId filter
         console.log("My Goals - Fetching private goals with params:", {
           workspaceId: currentWorkspace._id,
           isPrivate: true,
+          userId: authState.userId,
         });
 
         const fetchedGoals = await fetchGoals({
           workspaceId: currentWorkspace._id,
           isPrivate: true,
-          // Do not pass userId explicitly - the backend extracts it from the JWT token
+          userId: authState.userId,
         });
 
         console.log("My Goals - Fetched goals:", fetchedGoals);
@@ -54,11 +58,12 @@ export default function MyGoalsPage() {
         setGoals([]);
       } finally {
         setIsLoading(false);
+        isLoadingRef.current = false;
       }
     };
 
     loadGoals();
-  }, [currentWorkspace, authState.userId]);
+  }, [currentWorkspace?._id, authState.userId]);
 
   const handleCreateGoal = () => {
     router.push("/goals/new");
@@ -74,7 +79,6 @@ export default function MyGoalsPage() {
       workspaceName={currentWorkspace?.name || "My workspace"}
       onCreateGoal={handleCreateGoal}
       showFilter={true}
-      
     >
       {isLoading ? (
         <div className="flex items-center justify-center h-64">

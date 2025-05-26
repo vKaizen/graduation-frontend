@@ -29,8 +29,7 @@ export const SORT_OPTIONS: SortOption[] = [
   { id: "dueDate", label: "Due date", icon: Calendar },
   { id: "priority", label: "Priority", icon: SortAsc },
   { id: "assignee", label: "Assignee", icon: ArrowDownAZ },
-  { id: "dateCreated", label: "Date created", icon: Clock },
-  { id: "dateUpdated", label: "Date updated", icon: Clock },
+  
 ]
 
 export function SortMenu({ activeSort, onSortChange }: SortMenuProps) {

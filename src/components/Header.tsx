@@ -1,18 +1,15 @@
 "use client";
 
 import {
-  CircleDot,
-  FileText,
-  Folder,
-  LogOut,
   Menu,
-  MessageSquare,
   Plus,
   Search,
-  Settings,
+  FileText,
+  Folder,
   Triangle,
   User,
-  UserPlus,
+  Settings,
+  LogOut,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -31,10 +28,12 @@ import { useEffect, useState } from "react";
 import { fetchUserById } from "@/api-service";
 import { getInitials } from "@/lib/user-utils";
 import { useWorkspace } from "@/contexts/workspace-context";
+import { useRBAC } from "@/hooks/useRBAC";
 
 export function Header() {
   const { authState, logout } = useAuth();
   const { currentWorkspace } = useWorkspace();
+  const { checkPermission } = useRBAC();
   const [userData, setUserData] = useState<{
     fullName: string;
     email: string;
@@ -44,6 +43,11 @@ export function Header() {
     email: "Loading...",
     initials: "...",
   });
+
+  // Check permissions for create actions
+  const canCreateProject = checkPermission("create", "project");
+  const canCreatePortfolio = checkPermission("create", "portfolio");
+  const canCreateGoal = checkPermission("create", "goal");
 
   // Fetch user data when component mounts
   useEffect(() => {
@@ -73,12 +77,11 @@ export function Header() {
   return (
     <header className="h-14 border-b border-[#353535] bg-[#1a1a1a] flex items-center">
       <div className="flex items-center w-64 px-4">
-        <Button variant="ghost" size="icon" className="text-gray-400 -ml-2">
+        <Button variant="ghost" size="icon" className="text-gray-400 -ml-2 hover:bg-[#353535] hover:text-white">
           <Menu className="h-5 w-5" />
         </Button>
-        <span className="text-white font-medium ml-3">
-          {currentWorkspace?.name || "My Workspace"}
-        </span>
+        <span className="text-white font-bold text-xl ml-3">Avana</span>
+
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -91,35 +94,72 @@ export function Header() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56 mt-2 p-0 bg-[#1a1a1a] border-[#353535] text-white">
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
-            <CircleDot className="mr-2 h-4 w-4" />
-            Task
-          </DropdownMenuItem>
           <DropdownMenuItem
-            className="py-2.5 focus:bg-[#353535] text-white"
-            asChild
+            className={`py-2.5 ${
+              canCreateProject
+                ? "focus:bg-[#353535] focus:text-white text-white"
+                : "text-gray-500 cursor-not-allowed"
+            }`}
+            disabled={!canCreateProject}
+            asChild={canCreateProject ? true : false}
           >
-            <Link href="/projects/new">
-              <FileText className="mr-2 h-4 w-4" />
-              Project
-            </Link>
+            {canCreateProject ? (
+              <Link href="/projects/new">
+                <FileText className="mr-2 h-4 w-4" />
+                Project
+              </Link>
+            ) : (
+              <>
+                <FileText className="mr-2 h-4 w-4" />
+                Project
+              </>
+            )}
           </DropdownMenuItem>
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Message
+
+          <DropdownMenuItem
+            className={`py-2.5 ${
+              canCreatePortfolio
+                ? "focus:bg-[#353535] focus:text-white text-white"
+                : "text-gray-500 cursor-not-allowed"
+            }`}
+            disabled={!canCreatePortfolio}
+            asChild={canCreatePortfolio ? true : false}
+          >
+            {canCreatePortfolio ? (
+              <Link href="/portfolio">
+                <Folder className="mr-2 h-4 w-4" />
+                Portfolio
+              </Link>
+            ) : (
+              <>
+                <Folder className="mr-2 h-4 w-4" />
+                Portfolio
+              </>
+            )}
           </DropdownMenuItem>
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
-            <Folder className="mr-2 h-4 w-4" />
-            Portfolio
-          </DropdownMenuItem>
+
           <DropdownMenuSeparator className="bg-[#353535]" />
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
-            <Triangle className="mr-2 h-4 w-4" />
-            Goal
-          </DropdownMenuItem>
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Invite
+
+          <DropdownMenuItem
+            className={`py-2.5 ${
+              canCreateGoal
+                ? "focus:bg-[#353535] focus:text-white text-white"
+                : "text-gray-500 cursor-not-allowed"
+            }`}
+            disabled={!canCreateGoal}
+            asChild={canCreateGoal ? true : false}
+          >
+            {canCreateGoal ? (
+              <Link href="/goals/new">
+                <Triangle className="mr-2 h-4 w-4" />
+                Goal
+              </Link>
+            ) : (
+              <>
+                <Triangle className="mr-2 h-4 w-4" />
+                Goal
+              </>
+            )}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -147,13 +187,13 @@ export function Header() {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="text-gray-400">
+          <Button variant="ghost" size="icon" className="text-gray-400 hover:bg-[#353535] hover:text-white">
             <User className="h-5 w-5" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-80 mr-2 mt-2 p-0 bg-[#1a1a1a] border-[#353535] text-white">
           <div className="p-4 flex items-center gap-3">
-            <Avatar className="h-12 w-12 bg-purple-600">
+            <Avatar className="h-12 w-12 bg-blue-400">
               <AvatarFallback>{userData.initials}</AvatarFallback>
             </Avatar>
             <div>
@@ -163,22 +203,22 @@ export function Header() {
               <div className="text-sm text-gray-400">{userData.email}</div>
             </div>
           </div>
-          <DropdownMenuSeparator className="bg-[#353535]" />
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
-            <User className="mr-2 h-4 w-4" />
+          <DropdownMenuSeparator className="bg-[#353535] " />
+          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] focus:text-white text-white">
+            <User className="mr-2 h-4 w-4  hover:text-white" />
             Profile
           </DropdownMenuItem>
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
+          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] focus:text-white text-white">
             <Settings className="mr-2 h-4 w-4" />
             Settings
           </DropdownMenuItem>
-          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] text-white">
+          <DropdownMenuItem className="py-2.5 focus:bg-[#353535] focus:text-white text-white">
             <Plus className="mr-2 h-4 w-4" />
             Add another account
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-[#353535]" />
           <DropdownMenuItem
-            className="py-2.5 focus:bg-[#353535] text-white"
+            className="py-2.5 focus:bg-[#353535] focus:text-white text-white"
             onClick={logout}
           >
             <LogOut className="mr-2 h-4 w-4" />

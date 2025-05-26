@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, MoreHorizontal } from "lucide-react";
 import { DropResult } from "@hello-pangea/dnd";
 import { getUserIdCookie } from "@/lib/cookies";
+import { useRBAC } from "@/hooks/useRBAC";
 
 import { BoardView } from "./board-view";
 import { ListView } from "./list-view";
@@ -42,6 +43,14 @@ export function ProjectView({
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [activeSort, setActiveSort] = useState<SortConfig | null>(null);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+
+  const { checkPermission } = useRBAC();
+  const canEditProject = project
+    ? checkPermission("edit", "project", { project })
+    : false;
+  const canEditTasks = project
+    ? checkPermission("edit", "task", { project })
+    : false;
 
   const handleSortChange = useCallback(
     (sortConfig: SortConfig | null) => {
@@ -714,31 +723,33 @@ export function ProjectView({
       {(activeView === "board" || activeView === "list") && (
         <div className="flex items-center justify-between px-4 h-14 border-b border-neutral-800 bg-[#121212]">
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              className="text-neutral-300 border-neutral-700 hover:bg-neutral-800 hover:text-neutral-200"
-              onClick={() => {
-                if (project?.sections.length > 0) {
-                  const firstSectionId = project.sections[0]._id;
-                  if (activeView === "board" || activeView === "list") {
-                    const sectionRef = document.querySelector(
-                      `[data-section-id="${firstSectionId}"]`
-                    );
-                    if (sectionRef) {
-                      const addTaskButton = sectionRef.querySelector(
-                        "button[data-add-task]"
-                      ) as HTMLButtonElement;
-                      if (addTaskButton) {
-                        addTaskButton.click();
+            {canEditTasks && (
+              <Button
+                variant="outline"
+                className="text-neutral-300 border-neutral-700 hover:bg-neutral-800 hover:text-neutral-200"
+                onClick={() => {
+                  if (project?.sections.length > 0) {
+                    const firstSectionId = project.sections[0]._id;
+                    if (activeView === "board" || activeView === "list") {
+                      const sectionRef = document.querySelector(
+                        `[data-section-id="${firstSectionId}"]`
+                      );
+                      if (sectionRef) {
+                        const addTaskButton = sectionRef.querySelector(
+                          "button[data-add-task]"
+                        ) as HTMLButtonElement;
+                        if (addTaskButton) {
+                          addTaskButton.click();
+                        }
                       }
                     }
                   }
-                }
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add task
-            </Button>
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add task
+              </Button>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <TaskFilters
@@ -746,20 +757,8 @@ export function ProjectView({
               onFilterChange={handleFilterChange}
             />
             <SortMenu activeSort={activeSort} onSortChange={handleSortChange} />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
-            >
-              Group
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
+            
+            
           </div>
         </div>
       )}

@@ -145,7 +145,7 @@ export function WorkspaceSelector() {
                   className={`flex items-center gap-2 rounded cursor-pointer px-2 py-1.5 hover:bg-[#353535] text-gray-200  ${
                     workspace._id === currentWorkspace._id
                       ? "bg-[#353535]"
-                      : "hover:bg-[#282828]"
+                      : "hover:bg-[#353535]"
                   }`}
                   disabled={isNavigating}
                 >

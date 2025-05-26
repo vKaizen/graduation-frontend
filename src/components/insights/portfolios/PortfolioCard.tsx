@@ -176,7 +176,7 @@ export const PortfolioCard = ({ portfolio, className }: PortfolioCardProps) => {
           <span className="mr-2">
             {projectCount} project{projectCount !== 1 ? "s" : ""}
           </span>
-          <Avatar className="h-6 w-6 bg-[#4573D2]">
+          <Avatar className="h-6 w-6 bg-[#4573D2] flex items-center justify-center">
             <span className="text-[10px] font-medium text-white">
               {ownerInitial}
             </span>

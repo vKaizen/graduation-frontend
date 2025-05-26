@@ -69,16 +69,6 @@ export function WorkspaceHeader({ workspace }: WorkspaceHeaderProps) {
               </p>
             </div>
           </div>
-
-          {/* Action Buttons */}
-          <div>
-            <Button
-              variant="outline"
-              className="text-white bg-[#252525] hover:bg-[#353535] border-[#252525] hover:text-white"
-            >
-              Create work
-            </Button>
-          </div>
         </div>
       </div>
     </div>

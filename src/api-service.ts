@@ -330,11 +330,11 @@ export const register = async (
 // Project-related API calls
 export const fetchProjects = async (): Promise<Project[]> => {
   try {
-    console.log(
-      "fetchProjects: Making request with headers:",
-      getAuthHeaders()
-    );
-    const response = await fetch(`${API_BASE_URL}/projects`, {
+    console.log("API SERVICE: Fetching all projects");
+
+    const url = `${API_BASE_URL}/projects`;
+
+    const response = await fetch(url, {
       headers: getAuthHeaders(),
     });
 
@@ -343,11 +343,12 @@ export const fetchProjects = async (): Promise<Project[]> => {
     }
 
     const projects = await response.json();
-    console.log("fetchProjects: Received projects:", projects);
-    return projects;
+    console.log(`API SERVICE: Received ${projects?.length || 0} projects`);
+
+    return Array.isArray(projects) ? projects : [];
   } catch (error) {
     console.error("Error fetching projects:", error);
-    throw error;
+    return [];
   }
 };
 
@@ -813,6 +814,29 @@ export const fetchTasksByProject = async (
     console.log(
       `DEBUG API - Found ${tasks?.length || 0} tasks for project ${projectId}`
     );
+
+    if (tasks && tasks.length > 0) {
+      // Log the first task to see its structure
+      console.log(`DEBUG API - First task structure:`, tasks[0]);
+      console.log(`DEBUG API - First task keys:`, Object.keys(tasks[0]));
+      console.log(`DEBUG API - First task title:`, tasks[0].title);
+
+      // Ensure all tasks have a title property
+      tasks.forEach((task: any, index: number) => {
+        if (!task.title) {
+          console.warn(
+            `DEBUG API - Task ${index} has no title property:`,
+            task
+          );
+          // Try to add a title property if missing
+          if (!task.title && task.name) {
+            task.title = task.name;
+          } else if (!task.title) {
+            task.title = `Task ${index + 1}`;
+          }
+        }
+      });
+    }
 
     // Check for completed tasks
     const completedTasks = tasks.filter(
@@ -1836,7 +1860,8 @@ export async function createInvite(
   accessToken: string,
   inviteeId: string,
   workspaceId: string,
-  selectedProjects?: string[]
+  selectedProjects?: string[],
+  role: string = "member"
 ): Promise<Invite> {
   const response = await fetch(`${API_BASE_URL}/invites`, {
     method: "POST",
@@ -1844,7 +1869,7 @@ export async function createInvite(
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ inviteeId, workspaceId, selectedProjects }),
+    body: JSON.stringify({ inviteeId, workspaceId, selectedProjects, role }),
   });
 
   if (!response.ok) {
@@ -2857,43 +2882,55 @@ export const fetchGoalById = async (goalId: string): Promise<Goal> => {
   }
 };
 
-export const fetchTasks = async (filters?: {
-  projectId?: string;
-  sectionId?: string;
-  assigneeId?: string;
-  status?: string;
-  workspaceId?: string;
-}): Promise<Task[]> => {
+export const fetchTasks = async (workspaceId?: string): Promise<Task[]> => {
   try {
-    // Build query string from filters
-    let queryParams = new URLSearchParams();
+    console.log("API SERVICE: Fetching tasks");
 
-    if (filters) {
-      if (filters.projectId) queryParams.append("projectId", filters.projectId);
-      if (filters.sectionId) queryParams.append("sectionId", filters.sectionId);
-      if (filters.assigneeId)
-        queryParams.append("assigneeId", filters.assigneeId);
-      if (filters.status) queryParams.append("status", filters.status);
-      if (filters.workspaceId)
-        queryParams.append("workspaceId", filters.workspaceId);
+    // If we have a workspace ID, use the workspace tasks endpoint
+    if (workspaceId) {
+      console.log(`API SERVICE: Fetching tasks for workspace ${workspaceId}`);
+      return fetchTasksByWorkspace(workspaceId);
     }
 
-    const queryString = queryParams.toString();
-    const url = `${API_BASE_URL}/tasks${queryString ? `?${queryString}` : ""}`;
+    // Otherwise, attempt to fetch all projects and then fetch tasks for each project
+    console.log(
+      "API SERVICE: No workspace ID provided, fetching tasks via projects"
+    );
+    const projects = await fetchProjects();
+    console.log(
+      `API SERVICE: Fetched ${projects.length} projects to gather tasks`
+    );
 
-    const response = await fetch(url, {
-      headers: getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch tasks: ${response.statusText}`);
+    if (projects.length === 0) {
+      console.log(
+        "API SERVICE: No projects found, returning empty tasks array"
+      );
+      return [];
     }
 
-    const data = await response.json();
-    return data;
+    // Create an array of promises for each project's tasks
+    const taskPromises = projects.map((project) =>
+      fetchTasksByProject(project._id)
+    );
+
+    // Wait for all promises to resolve
+    const tasksArrays = await Promise.all(taskPromises);
+
+    // Flatten the array of arrays into a single array of tasks
+    const allTasks = tasksArrays.flat();
+
+    // Remove duplicates based on task ID
+    const uniqueTasks = Array.from(
+      new Map(allTasks.map((task) => [task._id, task])).values()
+    );
+
+    console.log(
+      `API SERVICE: Fetched ${uniqueTasks.length} unique tasks across ${projects.length} projects`
+    );
+    return uniqueTasks;
   } catch (error) {
     console.error("Error fetching tasks:", error);
-    throw error;
+    return [];
   }
 };
 
@@ -3119,6 +3156,27 @@ export const updatePortfolioProjectsOrder = async (
     });
   } catch (error) {
     console.error("Error updating portfolio projects order:", error);
+    throw error;
+  }
+};
+
+export const deleteProject = async (projectId: string): Promise<void> => {
+  try {
+    if (!projectId) {
+      throw new Error("Project ID is required");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to delete project");
+    }
+  } catch (error: any) {
+    console.error("Error deleting project:", error);
     throw error;
   }
 };

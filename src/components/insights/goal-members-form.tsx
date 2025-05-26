@@ -30,6 +30,7 @@ interface GoalMembersFormProps {
   selectedTimeframe: GoalTimeframe;
   selectedTimeframeYear: number;
   progressResource?: "projects" | "tasks" | "none";
+  isWorkspaceGoal?: boolean;
 }
 
 export function GoalMembersForm({
@@ -47,6 +48,7 @@ export function GoalMembersForm({
   selectedTimeframe,
   selectedTimeframeYear,
   progressResource = "none",
+  isWorkspaceGoal = false,
 }: GoalMembersFormProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -62,6 +64,7 @@ export function GoalMembersForm({
     selectedMembers,
     isPrivate,
     progressResource,
+    isWorkspaceGoal,
   });
 
   // Filter users based on search term and exclude current user
@@ -196,33 +199,42 @@ export function GoalMembersForm({
       {/* Privacy section */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-white">Privacy</label>
-        <Select
-          value={isPrivate ? "private" : "workspace"}
-          onValueChange={(value) => setIsPrivate(value === "private")}
-        >
-          <SelectTrigger className="w-full bg-[#252525] border-[#353535] text-white">
-            <SelectValue placeholder="Choose privacy setting" />
-          </SelectTrigger>
-          <SelectContent className="bg-[#252525] border-[#353535] text-white">
-            <SelectItem value="private" className="hover:bg-[#353535]">
-              <div className="flex items-center">
-                <Lock className="h-4 w-4 mr-2" />
-                <span>Private to members</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="workspace" className="hover:bg-[#353535]">
-              <div className="flex items-center">
-                <Users className="h-4 w-4 mr-2" />
-                <span>Workspace</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="text-xs text-gray-400">
-          {isPrivate
-            ? "Only you and selected members can see this goal"
-            : "All workspace members can see this goal"}
-        </div>
+        {isWorkspaceGoal ? (
+          <div className="p-2 bg-[#252525] border border-[#353535] rounded-md text-white flex items-center">
+            <Users className="h-4 w-4 mr-2" />
+            <span>Workspace Goal (visible to all members)</span>
+          </div>
+        ) : (
+          <>
+            <Select
+              value={isPrivate ? "private" : "workspace"}
+              onValueChange={(value) => setIsPrivate(value === "private")}
+            >
+              <SelectTrigger className="w-full bg-[#252525] border-[#353535] text-white">
+                <SelectValue placeholder="Choose privacy setting" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#252525] border-[#353535] text-white">
+                <SelectItem value="private" className="hover:bg-[#353535]">
+                  <div className="flex items-center">
+                    <Lock className="h-4 w-4 mr-2" />
+                    <span>Private to members</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="workspace" className="hover:bg-[#353535]">
+                  <div className="flex items-center">
+                    <Users className="h-4 w-4 mr-2" />
+                    <span>Workspace</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-gray-400">
+              {isPrivate
+                ? "Only you and selected members can see this goal"
+                : "All workspace members can see this goal"}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Error message */}

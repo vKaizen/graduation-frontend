@@ -374,20 +374,7 @@ export const PortfolioContent: React.FC<PortfolioContentProps> = ({
             </span>
           )}
         </div>
-        <div className="flex items-center space-x-2">
-          <button className="text-gray-400 hover:text-white px-3 py-2 rounded text-xs">
-            Filter
-          </button>
-          <button className="text-gray-400 hover:text-white px-3 py-2 rounded text-xs">
-            Sort
-          </button>
-          <button className="text-gray-400 hover:text-white px-3 py-2 rounded text-xs">
-            Group
-          </button>
-          <button className="text-gray-400 hover:text-white px-3 py-2 rounded text-xs">
-            Options
-          </button>
-        </div>
+        
       </div>
 
       {/* Portfolio progress info - REMOVED */}

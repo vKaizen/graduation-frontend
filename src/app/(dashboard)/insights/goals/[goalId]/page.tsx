@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -55,12 +55,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-
 export default function GoalDetailsPage() {
   const router = useRouter();
   const params = useParams();
   const goalId = params.goalId as string;
   const { authState } = useAuth();
+  const isLoadingRef = useRef(false);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [goal, setGoal] = useState<Goal | null>(null);
   const [loading, setLoading] = useState(true);
@@ -179,6 +180,8 @@ export default function GoalDetailsPage() {
   }, []);
 
   const loadData = useCallback(async () => {
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
     setLoading(true);
     try {
       // First fetch the goal to get its workspace ID
@@ -432,12 +435,13 @@ export default function GoalDetailsPage() {
       setError("Failed to load goal details. Please try again.");
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
   }, [goalId, updateProgressHistory]);
 
   // Function to manually recalculate goal progress
   const handleRecalculateProgress = useCallback(async () => {
-    if (!goal) return;
+    if (!goal || updatingProgress) return;
 
     setUpdatingProgress(true);
     try {
@@ -461,27 +465,36 @@ export default function GoalDetailsPage() {
   }, [goalId, goal, updateProgressHistory]);
 
   useEffect(() => {
+    if (!goalId) return;
     loadData();
 
-    // Don't set up the interval on initial load
-    // This prevents an infinite loop of refreshing
-  }, [loadData]);
+    // Cleanup function
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+    };
+  }, [loadData, goalId]);
 
   // Set up a separate interval effect that only runs when we have a goal loaded
   useEffect(() => {
-    if (!goal || loading) return; // Skip if still loading or no goal
+    if (!goal || loading || refreshIntervalRef.current) return; // Skip if still loading, no goal, or interval already exists
 
     console.log("Setting up goal progress refresh interval");
     // Refresh progress every 30 seconds instead of 10 for better performance
-    const intervalId = setInterval(() => {
+    refreshIntervalRef.current = setInterval(() => {
       console.log("Auto-refreshing goal progress");
       handleRecalculateProgress();
     }, 30000);
 
     // Clean up interval on component unmount or when dependencies change
     return () => {
-      console.log("Clearing goal progress refresh interval");
-      clearInterval(intervalId);
+      if (refreshIntervalRef.current) {
+        console.log("Clearing goal progress refresh interval");
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
     };
   }, [goal, loading, handleRecalculateProgress]);
 
@@ -833,14 +846,12 @@ export default function GoalDetailsPage() {
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              
               <div className="mx-4 h-4 border-r border-[#353535]"></div>
               <div className="text-sm text-gray-400">
                 {goal.timeframe} {goal.timeframeYear}
               </div>
             </div>
             <div className="flex items-center">
-              
               <Button
                 className="bg-[#4573D2] hover:bg-[#3A62B3]"
                 onClick={handleRecalculateProgress}

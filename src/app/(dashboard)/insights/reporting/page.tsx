@@ -5,13 +5,15 @@ import { ReportingDashboard } from "@/components/insights/reporting/ReportingDas
 import { ReportingHeader } from "@/components/insights/reporting/ReportingHeader";
 import { ProjectSelector } from "@/components/insights/reporting/ProjectSelector";
 import { DateRangeSelector } from "@/components/insights/reporting/DateRangeSelector";
-import { fetchProjects, fetchProject } from "@/api-service";
+import { fetchProject, fetchProjectsByWorkspace } from "@/api-service";
 import { Project } from "@/types";
 import { useToast } from "@/components/ui/use-toast";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 export default function ReportingPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const { currentWorkspace } = useWorkspace();
 
   // Initialize dates with explicit debugging
   const currentDate = new Date();
@@ -40,20 +42,32 @@ export default function ReportingPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Fetch projects only once when component mounts
+  // Fetch projects when component mounts or workspace changes
   useEffect(() => {
     let isMounted = true;
 
     const loadProjects = async () => {
       try {
+        if (!currentWorkspace?._id) {
+          setProjects([]);
+          setLoading(false);
+          return;
+        }
+
         setLoading(true);
         setFetchError(null);
 
-        console.log("Fetching projects...");
-        const projectsData = await fetchProjects();
+        console.log(
+          `Fetching projects for workspace ${currentWorkspace.name}...`
+        );
+        const projectsData = await fetchProjectsByWorkspace(
+          currentWorkspace._id
+        );
 
         if (isMounted) {
-          console.log(`Fetched ${projectsData.length} projects`);
+          console.log(
+            `Fetched ${projectsData.length} projects from workspace ${currentWorkspace.name}`
+          );
 
           // Check if projects have sections and tasks loaded
           const projectsWithMissingData = projectsData.filter(
@@ -115,7 +129,7 @@ export default function ReportingPage() {
     return () => {
       isMounted = false;
     };
-  }, []); // Empty dependency array - only run once on mount
+  }, [currentWorkspace]); // Run when currentWorkspace changes
 
   const handleProjectSelection = (projectIds: string[]) => {
     setSelectedProjectIds(projectIds);

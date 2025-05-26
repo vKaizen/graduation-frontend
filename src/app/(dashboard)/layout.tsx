@@ -3,6 +3,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/Header";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { WorkspaceProvider } from "@/contexts/workspace-context";
+import { ProjectProvider } from "@/contexts/project-context";
 import { cn } from "@/lib/utils";
 
 const scrollbarHideClass = `
@@ -16,17 +17,21 @@ export default function DashboardLayout({
 }>) {
   return (
     <WorkspaceProvider>
-      <SidebarProvider>
-        <div className="flex flex-col h-screen">
-          <Header />
-          <div className="flex flex-1 overflow-hidden">
-            <AppSidebar />
-            <main className={cn("flex-1 overflow-y-auto", scrollbarHideClass)}>
-              {children}
-            </main>
+      <ProjectProvider>
+        <SidebarProvider>
+          <div className="flex flex-col h-screen">
+            <Header />
+            <div className="flex flex-1 overflow-hidden">
+              <AppSidebar />
+              <main
+                className={cn("flex-1 overflow-y-auto", scrollbarHideClass)}
+              >
+                {children}
+              </main>
+            </div>
           </div>
-        </div>
-      </SidebarProvider>
+        </SidebarProvider>
+      </ProjectProvider>
     </WorkspaceProvider>
   );
 }

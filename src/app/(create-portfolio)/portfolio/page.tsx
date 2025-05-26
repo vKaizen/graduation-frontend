@@ -4,14 +4,65 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, X } from "lucide-react";
 import { useWorkspace } from "@/contexts/workspace-context";
+import { PermissionGuard } from "@/components/permission/PermissionGuard";
+import { createPortfolio } from "@/api-service";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/use-toast";
 
-export default function CreatePortfolioPage() {
-  // Use workspace context but don't show error - prevent unused var warning
-  const {
-    /* currentWorkspace */
-  } = useWorkspace();
-  const [portfolioName, setPortfolioName] = useState("hthth");
+function CreatePortfolioForm() {
+  const router = useRouter();
+  const { toast } = useToast();
+  const { currentWorkspace } = useWorkspace();
+  const [portfolioName, setPortfolioName] = useState("");
   const [selectedView, setSelectedView] = useState("list");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!portfolioName.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a portfolio name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!currentWorkspace?._id) {
+      toast({
+        title: "Error",
+        description: "No workspace selected",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // Create new portfolio
+      const portfolio = await createPortfolio({
+        name: portfolioName,
+        workspaceId: currentWorkspace._id,
+        projects: [], // Add empty projects array to satisfy the DTO type
+      });
+
+      toast({
+        title: "Success",
+        description: "Portfolio created successfully",
+      });
+
+      // Redirect to the new portfolio
+      router.push(`/insights/portfolios/${portfolio._id}`);
+    } catch (error) {
+      console.error("Error creating portfolio:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create portfolio. Please try again.",
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#1A1A1A] flex">
@@ -42,6 +93,7 @@ export default function CreatePortfolioPage() {
               value={portfolioName}
               onChange={(e) => setPortfolioName(e.target.value)}
               className="w-full bg-transparent border border-gray-700 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter portfolio name"
             />
           </div>
 
@@ -144,8 +196,12 @@ export default function CreatePortfolioPage() {
           </div>
         </div>
 
-        <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md mt-8 transition-colors">
-          Continue
+        <button
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md mt-8 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+          onClick={handleSubmit}
+          disabled={isSubmitting || !portfolioName.trim()}
+        >
+          {isSubmitting ? "Creating..." : "Continue"}
         </button>
       </div>
 
@@ -157,7 +213,7 @@ export default function CreatePortfolioPage() {
             <div className="flex items-center space-x-3 mb-4">
               <div className="bg-gray-700 h-8 w-8 rounded"></div>
               <h3 className="text-white font-medium">
-                {portfolioName || "hthth"}
+                {portfolioName || "Portfolio name"}
               </h3>
             </div>
 
@@ -234,4 +290,12 @@ function getRandomColor(seed: number) {
 function getRandomWidth() {
   const widths = ["16", "24", "32", "40", "48"];
   return widths[Math.floor(Math.random() * widths.length)];
+}
+
+export default function CreatePortfolioPage() {
+  return (
+    <PermissionGuard action="create" resource="portfolio">
+      <CreatePortfolioForm />
+    </PermissionGuard>
+  );
 }

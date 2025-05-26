@@ -75,7 +75,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return userId === currentWorkspace.owner?.toString();
     }
 
-    return currentRole ? requiredRoles.includes(currentRole) : false;
+    // Case-insensitive role checking
+    if (!currentRole) return false;
+
+    // Convert current role to lowercase for comparison
+    const normalizedCurrentRole = currentRole.toLowerCase();
+
+    // Convert all required roles to lowercase for comparison
+    const normalizedRequiredRoles = requiredRoles.map((role) =>
+      role ? (role.toLowerCase() as WorkspaceRole) : null
+    );
+
+    return normalizedRequiredRoles.includes(
+      normalizedCurrentRole as WorkspaceRole
+    );
   };
 
   // Handle workspaces with old or new member structure format
