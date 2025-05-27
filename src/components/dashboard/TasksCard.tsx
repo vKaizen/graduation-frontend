@@ -11,6 +11,7 @@ import {
   fetchTasksByProject,
   fetchProjectsByWorkspace,
   updateTask,
+  updateTaskCompletionAndProgress,
 } from "@/api-service";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboard } from "@/contexts/DashboardContext";
@@ -168,9 +169,6 @@ export function TasksCard({
     currentStatus: boolean
   ) => {
     try {
-      // Get current timestamp for completedAt
-      const now = new Date();
-
       // Optimistically update the UI
       setTasks(
         tasks.map((task) =>
@@ -179,18 +177,14 @@ export function TasksCard({
                 ...task,
                 completed: !currentStatus,
                 status: !currentStatus ? "completed" : "not started",
-                completedAt: !currentStatus ? now : undefined,
+                completedAt: !currentStatus ? new Date() : undefined,
               }
             : task
         )
       );
 
-      // Update in the backend
-      await updateTask(taskId, {
-        completed: !currentStatus,
-        status: !currentStatus ? "completed" : "not started",
-        completedAt: !currentStatus ? now.toISOString() : null,
-      });
+      // Update in the backend and recalculate goal progress
+      await updateTaskCompletionAndProgress(taskId, !currentStatus);
     } catch (error) {
       console.error("Error updating task:", error);
 

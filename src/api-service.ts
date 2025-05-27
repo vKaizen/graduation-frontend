@@ -3180,3 +3180,86 @@ export const deleteProject = async (projectId: string): Promise<void> => {
     throw error;
   }
 };
+
+export const updateTaskCompletionAndProgress = async (
+  taskId: string,
+  completionStatus: boolean,
+  goalId?: string
+): Promise<Task> => {
+  try {
+    // First update the task completion status
+    const updatedTask = await updateTask(taskId, {
+      completed: completionStatus,
+      status: completionStatus ? "completed" : "not started",
+      completedAt: completionStatus ? new Date().toISOString() : null,
+    });
+
+    // If a goalId is provided, recalculate its progress
+    if (goalId) {
+      await calculateGoalProgress(goalId);
+    } else {
+      // Otherwise, try to find goals that have this task and update them
+      try {
+        const goals = await fetchGoals();
+        const relatedGoals = goals.filter(
+          (goal) =>
+            goal.linkedTasks?.includes(taskId) &&
+            goal.progressResource === "tasks"
+        );
+
+        // Update progress for all related goals
+        for (const goal of relatedGoals) {
+          await calculateGoalProgress(goal._id);
+        }
+      } catch (error) {
+        console.error("Error updating goal progress:", error);
+      }
+    }
+
+    return updatedTask;
+  } catch (error) {
+    console.error("Error updating task completion and progress:", error);
+    throw error;
+  }
+};
+
+export const updateProjectStatusAndProgress = async (
+  projectId: string,
+  completionStatus: boolean,
+  goalId?: string
+): Promise<Project> => {
+  try {
+    // First update the project completion status
+    const updatedProject = await updateProjectStatus(
+      projectId,
+      completionStatus ? "completed" : "in progress"
+    );
+
+    // If a goalId is provided, recalculate its progress
+    if (goalId) {
+      await calculateGoalProgress(goalId);
+    } else {
+      // Otherwise, try to find goals that have this project and update them
+      try {
+        const goals = await fetchGoals();
+        const relatedGoals = goals.filter(
+          (goal) =>
+            goal.projects?.includes(projectId) &&
+            goal.progressResource === "projects"
+        );
+
+        // Update progress for all related goals
+        for (const goal of relatedGoals) {
+          await calculateGoalProgress(goal._id);
+        }
+      } catch (error) {
+        console.error("Error updating goal progress:", error);
+      }
+    }
+
+    return updatedProject;
+  } catch (error) {
+    console.error("Error updating project status and progress:", error);
+    throw error;
+  }
+};

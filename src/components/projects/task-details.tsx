@@ -736,8 +736,6 @@ export function TaskDetails({
                   </Button>
                 </div>
 
-                
-
                 {/* Fields */}
                 <div className="space-y-2">
                   <label className="text-sm text-neutral-400">Fields</label>
@@ -766,7 +764,7 @@ export function TaskDetails({
                         <ChevronRight className="h-4 w-4 text-neutral-500" />
                         <span className="text-sm text-neutral-400">Status</span>
                       </div>
-                      <Badge 
+                      <Badge
                         className={cn(
                           task.status === "completed"
                             ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"

@@ -5,10 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Users, CalendarDays } from "lucide-react";
 import { getAuthCookie } from "@/lib/cookies";
 import { jwtDecode } from "jwt-decode";
-import { fetchUserById, fetchUsers } from "@/api-service";
+import {
+  fetchUserById,
+  fetchUsers,
+  fetchWorkspaceMembers,
+  fetchTasksByProject,
+  fetchProjectsByWorkspace,
+} from "@/api-service";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getUserIdCookie } from "@/lib/cookies";
+import { useWorkspace } from "@/contexts/workspace-context";
+import { Task } from "@/types";
 
 export function GreetingSection() {
+  const { currentWorkspace } = useWorkspace();
   const [userData, setUserData] = useState<{
     name: string;
     tasksCompleted: number;
@@ -152,6 +162,61 @@ export function GreetingSection() {
 
     getUserData();
   }, []);
+
+  // Fetch workspace members and tasks
+  useEffect(() => {
+    async function fetchData() {
+      if (!currentWorkspace?._id) return;
+
+      try {
+        // Get current user ID
+        const userId = getUserIdCookie();
+        if (!userId) return;
+
+        // Fetch workspace members to count collaborators
+        const members = await fetchWorkspaceMembers(currentWorkspace._id);
+        const collaboratorsCount = members?.length || 0;
+
+        // Fetch completed tasks assigned to the current user
+        const projects = await fetchProjectsByWorkspace(currentWorkspace._id);
+
+        if (projects && projects.length > 0) {
+          let allTasks: Task[] = [];
+
+          await Promise.all(
+            projects.map(async (project) => {
+              try {
+                const projectTasks = await fetchTasksByProject(project._id);
+                if (projectTasks && projectTasks.length > 0) {
+                  allTasks = [...allTasks, ...projectTasks];
+                }
+              } catch (err) {
+                console.error(
+                  `Error fetching tasks for project ${project._id}:`,
+                  err
+                );
+              }
+            })
+          );
+
+          // Filter tasks that are assigned to the current user and are completed
+          const completedUserTasks = allTasks.filter(
+            (task) => task.assignee === userId && task.completed === true
+          );
+
+          setUserData((prev) => ({
+            ...prev,
+            tasksCompleted: completedUserTasks.length,
+            collaborators: collaboratorsCount,
+          }));
+        }
+      } catch (error) {
+        console.error("Error fetching data for greeting section:", error);
+      }
+    }
+
+    fetchData();
+  }, [currentWorkspace]);
 
   const dateString = new Date().toLocaleDateString("en-US", {
     weekday: "long",
