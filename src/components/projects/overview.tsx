@@ -278,8 +278,11 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
 
       // Update the local project state with the returned project data
       if (updatedProject) {
-        // Call the parent's function without parameters to avoid project refresh
+        // Directly update the project in the parent component with the new description
         updateProjectStatus();
+
+        // Also update the local copy of the project to ensure immediate UI update
+        project.description = description;
       }
     } catch (error) {
       console.error("Error updating project description:", error);
@@ -334,7 +337,35 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
   };
 
   // Add a function to refresh the project after adding a member
-  const handleMemberAdded = () => {
+  const handleMemberAdded = async (newMember: any) => {
+    // First update local state immediately to show the new member without refresh
+    if (newMember && newMember.userId) {
+      // Create a copy of project roles and add the new member
+      const updatedRoles = [...project.roles, newMember];
+
+      // Update local project.roles to show the change immediately
+      project.roles = updatedRoles;
+
+      // Also try to fetch the user data if not already in userMap
+      if (newMember.userId && !userMap[newMember.userId]) {
+        try {
+          const user = await fetchUserById(newMember.userId);
+          if (user) {
+            // Update the userMap with the new user
+            setUserMap((prevMap) => ({
+              ...prevMap,
+              [newMember.userId]: {
+                email: user.email || "Unknown Email",
+                fullName: user.fullName || user.email || "Unknown User",
+              },
+            }));
+          }
+        } catch (error) {
+          console.error("Error fetching new member data:", error);
+        }
+      }
+    }
+
     // Call the parent's update function to trigger project refresh
     updateProjectStatus();
 
@@ -432,7 +463,7 @@ export function Overview({ project, updateProjectStatus }: OverviewProps) {
               />
             ) : (
               <p className="text-neutral-400">
-                {project.description || "What's this project about?"}
+                {description || "What's this project about?"}
               </p>
             )}
           </div>

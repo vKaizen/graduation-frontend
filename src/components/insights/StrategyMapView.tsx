@@ -373,23 +373,40 @@ export const StrategyMapView = ({
             startX = 400;
           }
 
-          // Calculate total bottom layer nodes (always show all nodes)
+          // Calculate total bottom layer nodes (only count nodes that are actually connected to goals)
           let totalBottomNodes = 0;
           goals.forEach((goal) => {
+            // Only count projects or tasks if the goal has them configured AND there are actual items
             if (
               goal.progressResource === "projects" &&
               goal.projects &&
               goal.projects.length > 0
             ) {
               totalBottomNodes += goal.projects.length;
+              console.log(
+                `Goal ${goal._id}: Adding ${goal.projects.length} projects to bottom node count`
+              );
             } else if (
               goal.progressResource === "tasks" &&
               goal.linkedTasks &&
               goal.linkedTasks.length > 0
             ) {
               totalBottomNodes += goal.linkedTasks.length;
+              console.log(
+                `Goal ${goal._id}: Adding ${goal.linkedTasks.length} tasks to bottom node count`
+              );
+            } else {
+              console.log(
+                `Goal ${goal._id}: No bottom nodes to add. Progress source: ${
+                  goal.progressResource
+                }, Projects: ${goal.projects?.length || 0}, Tasks: ${
+                  goal.linkedTasks?.length || 0
+                }`
+              );
             }
           });
+
+          console.log(`Total bottom nodes calculated: ${totalBottomNodes}`);
 
           const bottomSpacing = calculateSpacing(totalBottomNodes, 450);
           const totalBottomWidth = totalBottomNodes * bottomSpacing;
@@ -448,6 +465,14 @@ export const StrategyMapView = ({
                 goal.linkedTasks &&
                 goal.linkedTasks.length > 0);
 
+            console.log(
+              `Goal ${goal._id}: hasChildren=${hasChildren}, progressResource=${
+                goal.progressResource
+              }, projectsCount=${goal.projects?.length || 0}, tasksCount=${
+                goal.linkedTasks?.length || 0
+              }`
+            );
+
             // Always treat as expanded
             const isExpanded = true;
 
@@ -491,7 +516,7 @@ export const StrategyMapView = ({
               zIndex: 9999,
             });
 
-            // Always create child nodes (no longer checking if expanded)
+            // Only create child nodes if the goal has a progress resource and connected items
             console.log(`Goal ${goal._id} checking for projects and tasks`);
             console.log(`Goal progress resource: ${goal.progressResource}`);
             console.log(
@@ -500,6 +525,7 @@ export const StrategyMapView = ({
               }`
             );
 
+            // Only process projects if the goal is set to track progress from projects AND has projects
             if (
               goal.progressResource === "projects" &&
               goal.projects &&

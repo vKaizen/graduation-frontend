@@ -27,7 +27,7 @@ import RequireWorkspacePermission from "@/components/workspace/RequireWorkspaceP
 
 interface ProjectMemberAddModalProps {
   project: Project;
-  onMemberAdded?: () => void;
+  onMemberAdded?: (newMember?: any) => void;
 }
 
 export function ProjectMemberAddModal({
@@ -87,18 +87,22 @@ export function ProjectMemberAddModal({
         ? selectedMember.fullName || selectedMember.email
         : "Selected member";
 
-      await addProjectMember(project._id, {
+      const memberData = {
         userId: selectedMemberId,
         role: selectedRole,
         userName: memberName,
-      });
+      };
+
+      // Add the member to the project via API
+      const result = await addProjectMember(project._id, memberData);
 
       toast.success(`Added ${memberName} to the project`);
       setSelectedMemberId("");
       setOpen(false);
 
+      // Pass the member data to the parent component for immediate UI update
       if (onMemberAdded) {
-        onMemberAdded();
+        onMemberAdded(memberData);
       }
     } catch (error) {
       console.error("Failed to add member to project:", error);

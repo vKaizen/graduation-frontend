@@ -254,7 +254,6 @@ function ClientWorkspaceOverview({
 
   const { checkPermission } = useRBAC();
   const canCreateGoal = checkPermission("create", "goal");
-  const canDeleteProject = checkPermission("delete", "project");
 
   useEffect(() => {
     const loadData = async () => {
@@ -332,8 +331,14 @@ function ClientWorkspaceOverview({
   ) => {
     e.stopPropagation();
     e.preventDefault();
+
+    // Set project first
     setSelectedProject(project);
-    setIsDeleteDialogOpen(true);
+
+    // Use setTimeout to defer dialog opening to next event loop cycle
+    setTimeout(() => {
+      setIsDeleteDialogOpen(true);
+    }, 0);
   };
 
   const handleJoinSuccess = () => {
@@ -367,17 +372,17 @@ function ClientWorkspaceOverview({
   };
 
   const handleDeleteSuccess = () => {
-    setIsDeleteDialogOpen(false);
-
     // Remove the project from the local state
     if (selectedProject) {
-      setProjects((prevProjects) =>
-        prevProjects.filter((project) => project._id !== selectedProject._id)
-      );
+      // Use a setTimeout to defer UI updates
+      setTimeout(() => {
+        setProjects((prevProjects) =>
+          prevProjects.filter((project) => project._id !== selectedProject._id)
+        );
+      }, 100);
     }
 
-    // Clear the selected project
-    setSelectedProject(null);
+    // No need to clear selectedProject here, it's handled in onClose
   };
 
   // Helper function to get status color based on goal status
@@ -538,7 +543,9 @@ function ClientWorkspaceOverview({
                           )}
 
                           {/* Three dots menu with delete option for admin/owner */}
-                          {canDeleteProject && (
+                          {checkPermission("delete", "project", {
+                            project,
+                          }) && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
@@ -549,9 +556,27 @@ function ClientWorkspaceOverview({
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent className="w-40 bg-[#252525] border-[#353535]">
+                              <DropdownMenuContent
+                                className="w-40 bg-[#252525] border-[#353535]"
+                                onEscapeKeyDown={() => {
+                                  // Ensure dropdown is fully closed
+                                  document.body.click();
+                                }}
+                              >
                                 <DropdownMenuItem
-                                  onClick={(e) => handleDeleteClick(project, e)}
+                                  onSelect={() => {
+                                    // First close the dropdown menu completely
+                                    document.body.click();
+
+                                    // Then with delay, handle the delete action
+                                    setTimeout(() => {
+                                      if (project) {
+                                        // Update project selection and open dialog directly
+                                        setSelectedProject(project);
+                                        setIsDeleteDialogOpen(true);
+                                      }
+                                    }, 100);
+                                  }}
                                   className="text-red-400 hover:text-red-300 hover:bg-[#353535] cursor-pointer"
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
@@ -742,23 +767,30 @@ function ClientWorkspaceOverview({
       </div>
 
       {/* Project Join Dialog */}
-      {selectedProject && (
-        <>
-          <ProjectJoinDialog
-            projectId={selectedProject._id}
-            projectName={selectedProject.name}
-            isOpen={isJoinDialogOpen}
-            onClose={() => setIsJoinDialogOpen(false)}
-            onSuccess={handleJoinSuccess}
-          />
-          <ProjectDeleteDialog
-            projectId={selectedProject._id}
-            projectName={selectedProject.name}
-            isOpen={isDeleteDialogOpen}
-            onClose={() => setIsDeleteDialogOpen(false)}
-            onSuccess={handleDeleteSuccess}
-          />
-        </>
+      {selectedProject && isJoinDialogOpen && (
+        <ProjectJoinDialog
+          projectId={selectedProject._id}
+          projectName={selectedProject.name}
+          isOpen={isJoinDialogOpen}
+          onClose={() => setIsJoinDialogOpen(false)}
+          onSuccess={handleJoinSuccess}
+        />
+      )}
+
+      {/* Project Delete Dialog - completely separate rendering */}
+      {selectedProject && isDeleteDialogOpen && (
+        <ProjectDeleteDialog
+          projectId={selectedProject._id}
+          projectName={selectedProject.name}
+          isOpen={isDeleteDialogOpen}
+          onClose={() => {
+            // Close immediately
+            setIsDeleteDialogOpen(false);
+            // Clear selection after a delay to ensure proper cleanup
+            setTimeout(() => setSelectedProject(null), 100);
+          }}
+          onSuccess={handleDeleteSuccess}
+        />
       )}
     </div>
   );

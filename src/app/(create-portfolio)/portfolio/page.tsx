@@ -100,7 +100,7 @@ function CreatePortfolioForm() {
           <div className="space-y-2">
             <label className="text-sm text-gray-400">Privacy</label>
             <div className="relative">
-              <select className="w-full appearance-none bg-transparent border border-gray-700 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8">
+              <select className="w-full appearance-none bg-[#1a1a1a] border border-gray-700 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8">
                 <option value="public">Public to My workspace</option>
                 <option value="private">Private</option>
               </select>
@@ -123,75 +123,17 @@ function CreatePortfolioForm() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm text-gray-400">Default view</label>
+            
             <div className="grid grid-cols-2 gap-4">
-              <div
-                className={`border ${
-                  selectedView === "list"
-                    ? "border-blue-500 bg-blue-900/20"
-                    : "border-gray-700"
-                } rounded-md p-4 cursor-pointer`}
-                onClick={() => setSelectedView("list")}
-              >
-                <div className="flex items-center space-x-2">
-                  <div className="bg-blue-500 h-4 w-4 rounded"></div>
-                  <span className="text-white">List</span>
-                </div>
-                <div className="mt-2 pl-6 space-y-1">
-                  <div className="bg-gray-700 h-1 w-16 rounded"></div>
-                  <div className="bg-gray-700 h-1 w-16 rounded"></div>
-                </div>
-              </div>
+              
 
-              <div
-                className={`border ${
-                  selectedView === "timeline"
-                    ? "border-blue-500 bg-blue-900/20"
-                    : "border-gray-700"
-                } rounded-md p-4 cursor-pointer`}
-                onClick={() => setSelectedView("timeline")}
-              >
-                <div className="flex items-center space-x-2">
-                  <div className="bg-blue-500 h-4 w-4 rounded"></div>
-                  <span className="text-white">Timeline</span>
-                </div>
-                <div className="mt-2 pl-6">
-                  <div className="flex items-center">
-                    <div className="bg-blue-500 h-3 w-3 rounded"></div>
-                    <div className="bg-gray-700 h-1 w-12 rounded ml-1"></div>
-                  </div>
-                </div>
-              </div>
+              
+                
+              
 
-              <div
-                className={`border ${
-                  selectedView === "workload"
-                    ? "border-blue-500 bg-blue-900/20"
-                    : "border-gray-700"
-                } rounded-md p-4 cursor-pointer`}
-                onClick={() => setSelectedView("workload")}
-              >
-                <div className="flex items-center space-x-2">
-                  <div className="bg-blue-500 h-4 w-4 rounded"></div>
-                  <span className="text-white">Workload</span>
-                </div>
-                <div className="mt-2 pl-6">
-                  <svg
-                    className="h-5 w-5 text-blue-500"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M3 16L7 12L11 16L21 6"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-              </div>
+              
+                
+                
             </div>
           </div>
         </div>

@@ -325,13 +325,7 @@ export function NewProjectForm() {
             </p>
           </div>
 
-          {/* AI Setup Button */}
-          <Button
-            variant="outline"
-            className="w-full h-11 bg-[#1E1E1E] border-[#353535] text-[#A1A1A1] hover:bg-[#353535] hover:text-white"
-          >
-            Set up with Asana AI
-          </Button>
+          
 
           {/* Error message */}
           {error && <div className="text-red-500 text-sm">{error}</div>}
@@ -342,7 +336,7 @@ export function NewProjectForm() {
             onClick={handleSubmit}
             disabled={!projectName.trim() || isLoading}
           >
-            {isLoading ? "Creating..." : "Continue"}
+            {isLoading ? "Creating..." : "Create Project"}
           </Button>
         </div>
       </div>

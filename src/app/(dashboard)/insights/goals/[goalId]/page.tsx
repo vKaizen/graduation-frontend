@@ -1365,7 +1365,7 @@ export default function GoalDetailsPage() {
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Search projects..."
-                className="pl-8 bg-[#121212] border-[#353535] text-white"
+                className="pl-8 bg-[#1a1a1a] border-[#353535] text-white"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -1414,11 +1414,7 @@ export default function GoalDetailsPage() {
                       className="flex-1 cursor-pointer"
                     >
                       <div className="font-medium">{project.name}</div>
-                      {project.description && (
-                        <div className="text-sm text-gray-400 truncate">
-                          {project.description}
-                        </div>
-                      )}
+                      
                     </label>
                   </div>
                 ))

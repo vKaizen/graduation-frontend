@@ -337,17 +337,7 @@ export function AppSidebar() {
           )}
         </div>
 
-        {/* Bottom Section */}
-        <div className="mt-auto space-y-2 p-2">
-          <SidebarNavItem href="/about" label="About" icon={Info} />
-          <Button
-            variant="outline"
-            className="w-full border-gray-600 text-gray-300"
-          >
-            <Mail className="h-4 w-4 mr-2" />
-            Invite collaborators
-          </Button>
-        </div>
+        
       </div>
     </aside>
   );
