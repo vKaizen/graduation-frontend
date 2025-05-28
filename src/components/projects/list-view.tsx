@@ -577,6 +577,16 @@ export function ListView({
               return 0;
           }
         });
+      } else {
+        // If no activeSort is provided, sort by order property
+        tasks.sort((a, b) => {
+          // Default to order by task order if available
+          if (typeof a.order === "number" && typeof b.order === "number") {
+            return a.order - b.order;
+          }
+          // Fallback to default sort if order is missing
+          return 0;
+        });
       }
 
       return { ...section, tasks };

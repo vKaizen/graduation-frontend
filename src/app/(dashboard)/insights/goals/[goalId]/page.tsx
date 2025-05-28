@@ -27,6 +27,8 @@ import {
   Send,
   Search,
   X,
+  Check,
+  Circle,
 } from "lucide-react";
 import { Goal, User, Project, Task } from "@/types";
 import {
@@ -40,6 +42,8 @@ import {
   updateProjectStatus,
   fetchProjectsByWorkspace,
   fetchTasksByProject,
+  updateTaskCompletionAndProgress,
+  updateProjectStatusAndProgress,
 } from "@/api-service";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -726,6 +730,69 @@ export default function GoalDetailsPage() {
     }
   }, [loading]);
 
+  // Handle task completion toggle
+  const toggleTaskCompletion = async (taskId: string, currentStatus: boolean) => {
+    try {
+      // Optimistically update the UI
+      const updatedTasks = tasks.map((task) =>
+        task._id === taskId
+          ? {
+              ...task,
+              completed: !currentStatus,
+              status: !currentStatus ? "completed" : "not started",
+              completedAt: !currentStatus ? new Date() : undefined,
+            }
+          : task
+      );
+      setTasks(updatedTasks);
+
+      // Update in the backend and recalculate goal progress for this specific goal
+      await updateTaskCompletionAndProgress(taskId, !currentStatus, goalId);
+      
+      // No need to manually recalculate goal progress as updateTaskCompletionAndProgress does it
+    } catch (error) {
+      console.error("Error updating task:", error);
+      // Revert the UI change if the API call fails
+      setTasks((prev) => 
+        prev.map((task) => 
+          task._id === taskId ? { ...task, completed: currentStatus } : task
+        )
+      );
+      toast.error("Failed to update task. Please try again.");
+    }
+  };
+
+  // Handle project completion toggle
+  const toggleProjectCompletion = async (projectId: string, currentStatus: boolean) => {
+    try {
+      // Optimistically update the UI
+      const updatedProjects = projects.map((project) =>
+        project._id === projectId
+          ? {
+              ...project,
+              completed: !currentStatus,
+              status: !currentStatus ? "completed" : "in progress",
+            }
+          : project
+      );
+      setProjects(updatedProjects);
+
+      // Update in the backend and recalculate goal progress for this specific goal
+      await updateProjectStatusAndProgress(projectId, !currentStatus, goalId);
+      
+      // No need to manually recalculate goal progress as updateProjectStatusAndProgress does it
+    } catch (error) {
+      console.error("Error updating project:", error);
+      // Revert the UI change if the API call fails
+      setProjects((prev) => 
+        prev.map((project) => 
+          project._id === projectId ? { ...project, completed: currentStatus } : project
+        )
+      );
+      toast.error("Failed to update project. Please try again.");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#121212]">
@@ -1021,9 +1088,9 @@ export default function GoalDetailsPage() {
                               : lt._id === task._id
                           )
                       )
-                      .map((task) => (
+                      .map((project) => (
                         <div
-                          key={task._id}
+                          key={project._id}
                           className="flex items-center justify-between p-3 bg-[#121212] rounded-md"
                         >
                           <div className="flex items-center">
@@ -1043,7 +1110,7 @@ export default function GoalDetailsPage() {
                     </div>
                   )}
                   <Button
-                    variant="outline"
+                              variant="ghost"
                     size="sm"
                     className="bg-transparent border-[#353535] text-white hover:bg-[#252525] w-full flex items-center justify-center"
                     onClick={handleConnectTask}
@@ -1240,7 +1307,7 @@ export default function GoalDetailsPage() {
                     <Badge
                       key={id}
                       className="bg-[#4573D2] hover:bg-[#3A62B3] flex items-center gap-1 pl-2 pr-1 py-1"
-                    >
+                            >
                       {task.title}
                       {task.project && (
                         <span className="text-xs opacity-80 mx-1">
@@ -1330,7 +1397,7 @@ export default function GoalDetailsPage() {
                     ? "No matching tasks found"
                     : "No tasks available"}
                 </div>
-              )}
+                              )}
             </div>
           </div>
           <DialogFooter className="sm:justify-between">

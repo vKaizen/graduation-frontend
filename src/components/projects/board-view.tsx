@@ -161,6 +161,8 @@ export function BoardView({
         assignee: taskData.assignee,
         dueDate: taskData.dueDate || undefined,
         priority: taskData.priority,
+        order:
+          project.sections.find((s) => s._id === sectionId)?.tasks.length || 0,
       });
       handleCancelCreate(sectionId);
     }
@@ -652,37 +654,14 @@ export function BoardView({
           }
         });
       } else {
-        // If no activeSort is provided, use default internal sorting
+        // If no activeSort is provided, sort by order property
         tasks.sort((a, b) => {
-          const direction = sortDirection === "asc" ? 1 : -1;
-          switch (sortBy) {
-            case "title":
-              return direction * a.title.localeCompare(b.title);
-            case "dueDate":
-              return (
-                direction *
-                (new Date(a.dueDate || 0).getTime() -
-                  new Date(b.dueDate || 0).getTime())
-              );
-            case "priority":
-              const priorityOrder = { High: 3, Medium: 2, Low: 1, none: 0 };
-              return (
-                direction *
-                (priorityOrder[a.priority || "none"] -
-                  priorityOrder[b.priority || "none"])
-              );
-            case "status":
-              const statusOrder = {
-                completed: 3,
-                "in progress": 2,
-                "not started": 1,
-              };
-              return (
-                direction * (statusOrder[a.status] - statusOrder[b.status])
-              );
-            default:
-              return 0;
+          // Default to order by task order if available
+          if (typeof a.order === "number" && typeof b.order === "number") {
+            return a.order - b.order;
           }
+          // Fallback to default sort if order is missing
+          return 0;
         });
       }
 

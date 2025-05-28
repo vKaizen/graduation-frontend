@@ -226,6 +226,19 @@ export function ProjectView({
         return;
       }
 
+      // Sort tasks by order for proper initial display
+      if (loadedProject.sections) {
+        loadedProject.sections = loadedProject.sections.map((section) => ({
+          ...section,
+          tasks: section.tasks.sort((a, b) => {
+            if (typeof a.order === "number" && typeof b.order === "number") {
+              return a.order - b.order;
+            }
+            return 0;
+          }),
+        }));
+      }
+
       console.log("ProjectView - Loaded project data:", {
         id: loadedProject._id,
         sections: loadedProject.sections?.map((section) => ({
@@ -605,18 +618,44 @@ export function ProjectView({
 
     if (!sourceSection || !destSection) return;
 
+    // Create copies of the task arrays
     const newSourceTasks = Array.from(sourceSection.tasks);
     const newDestTasks =
       source.droppableId === destination.droppableId
         ? newSourceTasks
         : Array.from(destSection.tasks);
 
+    // Remove the task from source
     const [removed] = newSourceTasks.splice(source.index, 1);
 
+    // Insert the task at the destination with the correct order
     if (source.droppableId === destination.droppableId) {
+      // Same section - just reorder
       newSourceTasks.splice(destination.index, 0, removed);
     } else {
+      // Different section - move to new section at the exact position dropped
+      // Set the task's section property to the destination section
+      removed.section = destination.droppableId;
+
+      // Insert at the exact destination index (not at the end)
       newDestTasks.splice(destination.index, 0, removed);
+    }
+
+    // Update the order property of tasks based on their new indices
+    // This is crucial for real-time visual updating
+    if (source.droppableId === destination.droppableId) {
+      // Update order in the same section
+      newSourceTasks.forEach((task, index) => {
+        task.order = index;
+      });
+    } else {
+      // Update order in both sections
+      newSourceTasks.forEach((task, index) => {
+        task.order = index;
+      });
+      newDestTasks.forEach((task, index) => {
+        task.order = index;
+      });
     }
 
     // Create new sections array for optimistic update
@@ -633,30 +672,53 @@ export function ProjectView({
     // Store the current state before update
     const previousState = project;
 
-    // Optimistically update UI
+    // Optimistically update UI with the new order values
     setProject({
       ...project,
       sections: newSections,
     });
 
+    // Also update originalProject to ensure filters work correctly
+    setOriginalProject({
+      ...originalProject,
+      sections: newSections,
+    });
+
     try {
-      // Calculate new order
-      const newOrder = destination.index;
-
-      // Make API call to persist the change
-      await moveTask(removed._id, destination.droppableId, newOrder);
-
-      // If tasks were reordered within the same section, update the order in the database
       if (source.droppableId === destination.droppableId) {
+        // If tasks were reordered within the same section, update the order in the database
+        console.log("Reordering tasks within section:", source.droppableId);
+        console.log(
+          "New task order:",
+          newSourceTasks.map((task) => task._id)
+        );
+
         await reorderTasks(
           source.droppableId,
           newSourceTasks.map((task) => task._id)
         );
+      } else {
+        // If task was moved to a different section, use moveTask
+        console.log("Moving task between sections");
+        console.log("Task ID:", removed._id);
+        console.log("New section:", destination.droppableId);
+        console.log("New order:", destination.index);
+
+        // Move the task to the exact destination index, not just appending to the end
+        await moveTask(removed._id, destination.droppableId, destination.index);
+
+        // After moving the task, also reorder all tasks in the destination section
+        // to ensure they have the correct order values in the database
+        await reorderTasks(
+          destination.droppableId,
+          newDestTasks.map((task) => task._id)
+        );
       }
     } catch (error) {
-      console.error("Error moving task:", error);
+      console.error("Error updating task position:", error);
       // Revert to previous state if API call fails
       setProject(previousState);
+      setOriginalProject(previousState);
     }
   };
 
@@ -757,8 +819,6 @@ export function ProjectView({
               onFilterChange={handleFilterChange}
             />
             <SortMenu activeSort={activeSort} onSortChange={handleSortChange} />
-            
-            
           </div>
         </div>
       )}
