@@ -58,6 +58,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { useGoals } from "@/contexts/GoalContext";
 
 export default function GoalDetailsPage() {
   const router = useRouter();
@@ -66,6 +67,7 @@ export default function GoalDetailsPage() {
   const { authState } = useAuth();
   const isLoadingRef = useRef(false);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const { refreshGoal, updateGoalProgress } = useGoals();
 
   const [goal, setGoal] = useState<Goal | null>(null);
   const [loading, setLoading] = useState(true);
@@ -453,11 +455,13 @@ export default function GoalDetailsPage() {
       const updatedProgress = await calculateGoalProgress(goalId);
 
       // Immediately get the updated goal data
-      const updatedGoal = await fetchGoalById(goalId);
+      const updatedGoal = await refreshGoal(goalId);
 
-      // Update the local goal state with the fresh data
-      setGoal(updatedGoal);
-      updateProgressHistory(updatedGoal);
+      if (updatedGoal) {
+        // Update the local goal state with the fresh data
+        setGoal(updatedGoal);
+        updateProgressHistory(updatedGoal);
+      }
 
       toast.success("Goal progress updated successfully");
     } catch (error) {
@@ -466,7 +470,7 @@ export default function GoalDetailsPage() {
     } finally {
       setUpdatingProgress(false);
     }
-  }, [goalId, goal, updateProgressHistory]);
+  }, [goalId, goal, updateProgressHistory, refreshGoal, updatingProgress]);
 
   useEffect(() => {
     if (!goalId) return;
@@ -731,7 +735,10 @@ export default function GoalDetailsPage() {
   }, [loading]);
 
   // Handle task completion toggle
-  const toggleTaskCompletion = async (taskId: string, currentStatus: boolean) => {
+  const toggleTaskCompletion = async (
+    taskId: string,
+    currentStatus: boolean
+  ) => {
     try {
       // Optimistically update the UI
       const updatedTasks = tasks.map((task) =>
@@ -747,14 +754,33 @@ export default function GoalDetailsPage() {
       setTasks(updatedTasks);
 
       // Update in the backend and recalculate goal progress for this specific goal
-      await updateTaskCompletionAndProgress(taskId, !currentStatus, goalId);
-      
-      // No need to manually recalculate goal progress as updateTaskCompletionAndProgress does it
+      const result = await updateTaskCompletionAndProgress(
+        taskId,
+        !currentStatus,
+        goalId
+      );
+
+      // Update the goal progress in the context and locally
+      if (goal && result.updatedGoals && result.updatedGoals.length > 0) {
+        const goalUpdate = result.updatedGoals.find((g) => g.goalId === goalId);
+        if (goalUpdate) {
+          // Update in context
+          updateGoalProgress(goalId, goalUpdate.progress);
+
+          // Update local state
+          setGoal((prev) =>
+            prev ? { ...prev, progress: goalUpdate.progress } : null
+          );
+
+          // Update progress history
+          updateProgressHistory({ ...goal, progress: goalUpdate.progress });
+        }
+      }
     } catch (error) {
       console.error("Error updating task:", error);
       // Revert the UI change if the API call fails
-      setTasks((prev) => 
-        prev.map((task) => 
+      setTasks((prev) =>
+        prev.map((task) =>
           task._id === taskId ? { ...task, completed: currentStatus } : task
         )
       );
@@ -763,7 +789,10 @@ export default function GoalDetailsPage() {
   };
 
   // Handle project completion toggle
-  const toggleProjectCompletion = async (projectId: string, currentStatus: boolean) => {
+  const toggleProjectCompletion = async (
+    projectId: string,
+    currentStatus: boolean
+  ) => {
     try {
       // Optimistically update the UI
       const updatedProjects = projects.map((project) =>
@@ -778,15 +807,36 @@ export default function GoalDetailsPage() {
       setProjects(updatedProjects);
 
       // Update in the backend and recalculate goal progress for this specific goal
-      await updateProjectStatusAndProgress(projectId, !currentStatus, goalId);
-      
-      // No need to manually recalculate goal progress as updateProjectStatusAndProgress does it
+      const result = await updateProjectStatusAndProgress(
+        projectId,
+        !currentStatus,
+        goalId
+      );
+
+      // Update the goal progress in the context and locally
+      if (goal && result.updatedGoals && result.updatedGoals.length > 0) {
+        const goalUpdate = result.updatedGoals.find((g) => g.goalId === goalId);
+        if (goalUpdate) {
+          // Update in context
+          updateGoalProgress(goalId, goalUpdate.progress);
+
+          // Update local state
+          setGoal((prev) =>
+            prev ? { ...prev, progress: goalUpdate.progress } : null
+          );
+
+          // Update progress history
+          updateProgressHistory({ ...goal, progress: goalUpdate.progress });
+        }
+      }
     } catch (error) {
       console.error("Error updating project:", error);
       // Revert the UI change if the API call fails
-      setProjects((prev) => 
-        prev.map((project) => 
-          project._id === projectId ? { ...project, completed: currentStatus } : project
+      setProjects((prev) =>
+        prev.map((project) =>
+          project._id === projectId
+            ? { ...project, completed: currentStatus }
+            : project
         )
       );
       toast.error("Failed to update project. Please try again.");
@@ -1088,9 +1138,9 @@ export default function GoalDetailsPage() {
                               : lt._id === task._id
                           )
                       )
-                      .map((project) => (
+                      .map((task) => (
                         <div
-                          key={project._id}
+                          key={task._id}
                           className="flex items-center justify-between p-3 bg-[#121212] rounded-md"
                         >
                           <div className="flex items-center">
@@ -1110,7 +1160,7 @@ export default function GoalDetailsPage() {
                     </div>
                   )}
                   <Button
-                              variant="ghost"
+                    variant="ghost"
                     size="sm"
                     className="bg-transparent border-[#353535] text-white hover:bg-[#252525] w-full flex items-center justify-center"
                     onClick={handleConnectTask}
@@ -1307,7 +1357,7 @@ export default function GoalDetailsPage() {
                     <Badge
                       key={id}
                       className="bg-[#4573D2] hover:bg-[#3A62B3] flex items-center gap-1 pl-2 pr-1 py-1"
-                            >
+                    >
                       {task.title}
                       {task.project && (
                         <span className="text-xs opacity-80 mx-1">
@@ -1397,7 +1447,7 @@ export default function GoalDetailsPage() {
                     ? "No matching tasks found"
                     : "No tasks available"}
                 </div>
-                              )}
+              )}
             </div>
           </div>
           <DialogFooter className="sm:justify-between">
@@ -1481,7 +1531,6 @@ export default function GoalDetailsPage() {
                       className="flex-1 cursor-pointer"
                     >
                       <div className="font-medium">{project.name}</div>
-                      
                     </label>
                   </div>
                 ))

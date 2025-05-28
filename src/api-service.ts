@@ -3181,53 +3181,99 @@ export const deleteProject = async (projectId: string): Promise<void> => {
   }
 };
 
-export const updateTaskCompletionAndProgress = async (
+// Original implementation
+const _originalUpdateTaskCompletionAndProgress = async (
   taskId: string,
   completionStatus: boolean,
   goalId?: string
-): Promise<Task> => {
+): Promise<{
+  task: Task;
+  updatedGoals: { goalId: string; progress: number }[];
+}> => {
   try {
     // First update the task completion status
     const updatedTask = await updateTask(taskId, {
       completed: completionStatus,
       status: completionStatus ? "completed" : "not started",
-      completedAt: completionStatus ? new Date().toISOString() : null,
+      completedAt: completionStatus ? new Date().toISOString() : undefined,
     });
+
+    // Track updated goals and their progress
+    const updatedGoals: { goalId: string; progress: number }[] = [];
 
     // If a goalId is provided, recalculate its progress
     if (goalId) {
-      await calculateGoalProgress(goalId);
+      const progress = await calculateGoalProgress(goalId);
+      updatedGoals.push({ goalId, progress });
     } else {
       // Otherwise, try to find goals that have this task and update them
       try {
         const goals = await fetchGoals();
         const relatedGoals = goals.filter(
           (goal) =>
-            goal.linkedTasks?.includes(taskId) &&
-            goal.progressResource === "tasks"
+            goal.linkedTasks?.some((lt) =>
+              typeof lt === "string" ? lt === taskId : lt._id === taskId
+            ) && goal.progressResource === "tasks"
         );
 
         // Update progress for all related goals
         for (const goal of relatedGoals) {
-          await calculateGoalProgress(goal._id);
+          const progress = await calculateGoalProgress(goal._id);
+          updatedGoals.push({ goalId: goal._id, progress });
         }
       } catch (error) {
         console.error("Error updating goal progress:", error);
       }
     }
 
-    return updatedTask;
+    return { task: updatedTask, updatedGoals };
   } catch (error) {
     console.error("Error updating task completion and progress:", error);
     throw error;
   }
 };
 
-export const updateProjectStatusAndProgress = async (
+// Wrapper that checks for patched version
+export const updateTaskCompletionAndProgress = async (
+  taskId: string,
+  completionStatus: boolean,
+  goalId?: string
+): Promise<{
+  task: Task;
+  updatedGoals: { goalId: string; progress: number }[];
+}> => {
+  // Check if we have a patched version in the window object
+  if (
+    typeof window !== "undefined" &&
+    typeof (window as any).updateTaskCompletionAndProgress === "function" &&
+    (window as any).updateTaskCompletionAndProgress !==
+      updateTaskCompletionAndProgress
+  ) {
+    // Use the patched version if available
+    return await (window as any).updateTaskCompletionAndProgress(
+      taskId,
+      completionStatus,
+      goalId
+    );
+  }
+
+  // Otherwise use the original implementation
+  return await _originalUpdateTaskCompletionAndProgress(
+    taskId,
+    completionStatus,
+    goalId
+  );
+};
+
+// Original implementation
+const _originalUpdateProjectStatusAndProgress = async (
   projectId: string,
   completionStatus: boolean,
   goalId?: string
-): Promise<Project> => {
+): Promise<{
+  project: Project;
+  updatedGoals: { goalId: string; progress: number }[];
+}> => {
   try {
     // First update the project completion status
     const updatedProject = await updateProjectStatus(
@@ -3235,31 +3281,69 @@ export const updateProjectStatusAndProgress = async (
       completionStatus ? "completed" : "in progress"
     );
 
+    // Track updated goals and their progress
+    const updatedGoals: { goalId: string; progress: number }[] = [];
+
     // If a goalId is provided, recalculate its progress
     if (goalId) {
-      await calculateGoalProgress(goalId);
+      const progress = await calculateGoalProgress(goalId);
+      updatedGoals.push({ goalId, progress });
     } else {
       // Otherwise, try to find goals that have this project and update them
       try {
         const goals = await fetchGoals();
         const relatedGoals = goals.filter(
           (goal) =>
-            goal.projects?.includes(projectId) &&
-            goal.progressResource === "projects"
+            goal.projects?.some((p) =>
+              typeof p === "string" ? p === projectId : p._id === projectId
+            ) && goal.progressResource === "projects"
         );
 
         // Update progress for all related goals
         for (const goal of relatedGoals) {
-          await calculateGoalProgress(goal._id);
+          const progress = await calculateGoalProgress(goal._id);
+          updatedGoals.push({ goalId: goal._id, progress });
         }
       } catch (error) {
         console.error("Error updating goal progress:", error);
       }
     }
 
-    return updatedProject;
+    return { project: updatedProject, updatedGoals };
   } catch (error) {
     console.error("Error updating project status and progress:", error);
     throw error;
   }
+};
+
+// Wrapper that checks for patched version
+export const updateProjectStatusAndProgress = async (
+  projectId: string,
+  completionStatus: boolean,
+  goalId?: string
+): Promise<{
+  project: Project;
+  updatedGoals: { goalId: string; progress: number }[];
+}> => {
+  // Check if we have a patched version in the window object
+  if (
+    typeof window !== "undefined" &&
+    typeof (window as any).updateProjectStatusAndProgress === "function" &&
+    (window as any).updateProjectStatusAndProgress !==
+      updateProjectStatusAndProgress
+  ) {
+    // Use the patched version if available
+    return await (window as any).updateProjectStatusAndProgress(
+      projectId,
+      completionStatus,
+      goalId
+    );
+  }
+
+  // Otherwise use the original implementation
+  return await _originalUpdateProjectStatusAndProgress(
+    projectId,
+    completionStatus,
+    goalId
+  );
 };

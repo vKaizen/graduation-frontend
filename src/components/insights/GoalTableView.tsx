@@ -21,6 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useGoals } from "@/contexts/GoalContext";
 
 interface GoalRowProps {
   goal: Goal;
@@ -39,6 +40,13 @@ const GoalRow = ({
   onToggleExpand = () => {},
   depth = 0,
 }: GoalRowProps) => {
+  // Use the GoalContext to get the most up-to-date progress
+  const { goals: contextGoals } = useGoals();
+
+  // Get the latest progress value from context if available
+  const contextGoal = contextGoals.find((g) => g._id === goal._id);
+  const progress = contextGoal ? contextGoal.progress : goal.progress;
+
   // Status icon mapping
   const statusIcons = {
     "on-track": <CheckCircle className="h-4 w-4 text-green-500" />,
@@ -114,8 +122,8 @@ const GoalRow = ({
 
       <div className="col-span-2">
         <div className="flex items-center space-x-2">
-          <Progress value={goal.progress} className="w-24 h-1.5" />
-          <span className="text-sm text-gray-300">{goal.progress}%</span>
+          <Progress value={progress} className="w-24 h-1.5" />
+          <span className="text-sm text-gray-300">{progress}%</span>
         </div>
         <div className="text-xs text-gray-400 mt-1 flex items-center">
           {statusIcons[goal.status as GoalStatus]}
@@ -175,6 +183,22 @@ export const GoalTableView = ({
 }: GoalTableViewProps) => {
   const [expandedGoals, setExpandedGoals] = useState<string[]>([]);
 
+  // Use the GoalContext to access the most up-to-date goals
+  const { goals: contextGoals } = useGoals();
+
+  // Merge the provided goals with any updates from the context
+  const mergedGoals = goals.map((goal) => {
+    const contextGoal = contextGoals.find((g) => g._id === goal._id);
+    if (contextGoal) {
+      // Return goal with updated progress from context
+      return {
+        ...goal,
+        progress: contextGoal.progress,
+      };
+    }
+    return goal;
+  });
+
   const toggleExpand = (goalId: string) => {
     setExpandedGoals((prev) =>
       prev.includes(goalId)
@@ -219,8 +243,8 @@ export const GoalTableView = ({
 
       {/* Table Rows */}
       <div className="space-y-1 mt-2">
-        {goals.length > 0 ? (
-          renderGoalRows(goals)
+        {mergedGoals.length > 0 ? (
+          renderGoalRows(mergedGoals)
         ) : (
           <div className="py-8 text-center text-gray-400">
             No goals found. Create your first goal to get started.

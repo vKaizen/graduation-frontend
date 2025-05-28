@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { Task, Project } from "@/types";
 import { getUserIdCookie } from "@/lib/cookies";
+import { useGoals } from "@/contexts/GoalContext";
 
 interface TasksCardProps {
   onRemove?: () => void;
@@ -38,6 +39,7 @@ export function TasksCard({
   const router = useRouter();
   const { currentWorkspace } = useWorkspace();
   const { toggleCardSize } = useDashboard();
+  const { updateGoalProgress } = useGoals();
 
   // Fetch tasks from the API
   useEffect(() => {
@@ -184,7 +186,27 @@ export function TasksCard({
       );
 
       // Update in the backend and recalculate goal progress
-      await updateTaskCompletionAndProgress(taskId, !currentStatus);
+      const result = await updateTaskCompletionAndProgress(
+        taskId,
+        !currentStatus
+      );
+
+      // Update any affected goals in the context
+      if (result.updatedGoals && result.updatedGoals.length > 0) {
+        console.log(
+          `Task ${taskId} completion updated ${result.updatedGoals.length} goals`
+        );
+        result.updatedGoals.forEach((goalUpdate) => {
+          console.log(
+            `Updating goal ${goalUpdate.goalId} progress to ${goalUpdate.progress}%`
+          );
+          updateGoalProgress(goalUpdate.goalId, goalUpdate.progress);
+        });
+      } else {
+        console.log(
+          `Task ${taskId} completion didn't update any goals directly`
+        );
+      }
     } catch (error) {
       console.error("Error updating task:", error);
 

@@ -18,6 +18,7 @@ import {
   Plus,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useGoals } from "@/contexts/GoalContext";
 
 interface GoalsCardProps {
   onRemove?: () => void;
@@ -35,9 +36,28 @@ export function GoalsCard({
   const { authState } = useAuth();
   const { currentWorkspace } = useWorkspace();
   const router = useRouter();
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [localGoals, setLocalGoals] = useState<Goal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Use the GoalContext to get global goals state
+  const { goals: contextGoals } = useGoals();
+
+  // Merge global context goals with local goals for real-time updates
+  const goals = localGoals.map((localGoal) => {
+    // Find matching goal in context if it exists
+    const contextGoal = contextGoals.find((g) => g._id === localGoal._id);
+
+    // If found in context, use the progress from context for real-time updates
+    if (contextGoal) {
+      return {
+        ...localGoal,
+        progress: contextGoal.progress,
+      };
+    }
+
+    // Otherwise use the local goal data
+    return localGoal;
+  });
 
   useEffect(() => {
     const loadGoals = async () => {
@@ -67,7 +87,7 @@ export function GoalsCard({
         });
 
         // Take the most recent 3 goals
-        setGoals(sortedGoals.slice(0, 3));
+        setLocalGoals(sortedGoals.slice(0, 3));
       } catch (err) {
         console.error("Error fetching goals for dashboard:", err);
         setError("Failed to load goals");
@@ -183,7 +203,7 @@ export function GoalsCard({
                       new Date(a.updatedAt || a.createdAt || "").getTime()
                     );
                   });
-                  setGoals(sortedGoals.slice(0, 3));
+                  setLocalGoals(sortedGoals.slice(0, 3));
                   setIsLoading(false);
                 })
                 .catch((err) => {

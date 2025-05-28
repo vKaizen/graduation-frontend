@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Trash2 } from "lucide-react";
+import { useGoals } from "@/contexts/GoalContext";
 
 // Simple loading component
 function WorkspaceLoading() {
@@ -254,6 +255,9 @@ function ClientWorkspaceOverview({
 
   const { checkPermission } = useRBAC();
   const canCreateGoal = checkPermission("create", "goal");
+
+  // Add the useGoals hook to access the most up-to-date goal data
+  const { goals: contextGoals } = useGoals();
 
   useEffect(() => {
     const loadData = async () => {
@@ -696,8 +700,17 @@ function ClientWorkspaceOverview({
             ) : (
               <div className="space-y-3">
                 {goals.slice(0, 3).map((goal) => {
+                  // Check if we have an updated version of this goal in context
+                  const contextGoal = contextGoals.find(
+                    (g) => g._id === goal._id
+                  );
+                  // Use the context progress if available, otherwise use the original
+                  const progress = contextGoal
+                    ? contextGoal.progress
+                    : goal.progress;
+
                   const statusStyle = getStatusStyle(goal.status);
-                  const progressColor = getProgressColor(goal.progress);
+                  const progressColor = getProgressColor(progress);
 
                   return (
                     <div
@@ -724,13 +737,13 @@ function ClientWorkspaceOverview({
                       <div className="relative pt-1 mb-2">
                         <div className="flex items-center justify-between mb-1">
                           <div className="text-xs text-[#a1a1a1]">
-                            {goal.progress}% Complete
+                            {progress}% Complete
                           </div>
                         </div>
                         <div className="flex h-2 bg-[#353535] rounded-full overflow-hidden">
                           <div
                             className={`${progressColor} rounded-full transition-all duration-300`}
-                            style={{ width: `${goal.progress}%` }}
+                            style={{ width: `${progress}%` }}
                           ></div>
                         </div>
                       </div>
@@ -739,7 +752,7 @@ function ClientWorkspaceOverview({
                         <span>
                           {goal.timeframe} {goal.timeframeYear}
                         </span>
-                        {goal.progress === 100 && (
+                        {progress === 100 && (
                           <span className="text-green-400 font-medium">
                             Completed
                           </span>

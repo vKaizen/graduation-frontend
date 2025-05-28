@@ -25,6 +25,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { StrategyMapNode } from "./StrategyMapNode";
+import { useGoals } from "@/contexts/GoalContext";
 
 // Enhanced spacing calculation specifically for goal nodes (middle layer)
 const calculateGoalSpacing = (itemCount: number, minSpacing: number = 600) => {
@@ -132,6 +133,9 @@ export const StrategyMapView = ({
   // Memoize nodeTypes to prevent render loops
   const memoizedNodeTypes = useMemo(() => nodeTypes, []);
   const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
+
+  // Add the GoalContext hook to get real-time goal updates
+  const { goals: contextGoals } = useGoals();
 
   // Function to toggle expand/collapse state
   const handleToggleExpand = (nodeId: string) => {
@@ -476,15 +480,23 @@ export const StrategyMapView = ({
             // Always treat as expanded
             const isExpanded = true;
 
+            // Before processing each goal, check if we have an updated version in the context
+            const contextGoal = contextGoals.find((g) => g._id === goal._id);
+
+            // If found in context, update the progress
+            const goalData = contextGoal
+              ? { ...goal, progress: contextGoal.progress }
+              : goal;
+
             const goalNode: Node = {
               id: goal._id,
               type: "goalNode",
               position: { x, y: GOALS_LEVEL_Y },
               data: {
-                ...goal,
-                ownerName: goal.owner?.fullName || goal.ownerId,
+                ...goalData,
+                ownerName: goalData.owner?.fullName || goalData.ownerId,
                 onEdit: () =>
-                  onEditGoal && onEditGoal({ ...goal, isPrivate: false }),
+                  onEditGoal && onEditGoal({ ...goalData, isPrivate: false }),
                 hasChildren,
                 isExpanded,
                 onToggleExpand: handleToggleExpand,
@@ -518,15 +530,16 @@ export const StrategyMapView = ({
 
             // Only create child nodes if the goal has a progress resource and connected items
             console.log(`Goal ${goal._id} checking for projects and tasks`);
-            console.log(`Goal progress resource: ${goal.progressResource}`);
+            console.log(`Goal progress resource: ${goal._id}`);
             console.log(
-              `Projects: ${goal.projects ? goal.projects.length : 0}, Tasks: ${
-                goal.linkedTasks ? goal.linkedTasks.length : 0
+              `Projects: ${goal._id ? goal.projects?.length || 0 : 0}, Tasks: ${
+                goal._id ? goal.linkedTasks?.length || 0 : 0
               }`
             );
 
             // Only process projects if the goal is set to track progress from projects AND has projects
             if (
+              goal._id &&
               goal.progressResource === "projects" &&
               goal.projects &&
               goal.projects.length > 0
@@ -603,6 +616,7 @@ export const StrategyMapView = ({
                 });
               }
             } else if (
+              goal._id &&
               goal.progressResource === "tasks" &&
               goal.linkedTasks &&
               goal.linkedTasks.length > 0
@@ -837,7 +851,14 @@ export const StrategyMapView = ({
     };
 
     transformGoalsToNodes();
-  }, [rootGoal, onEditGoal, USE_TEST_MODE, projectsMap, tasksMap]);
+  }, [
+    rootGoal,
+    onEditGoal,
+    USE_TEST_MODE,
+    projectsMap,
+    tasksMap,
+    contextGoals,
+  ]);
 
   if (loading) {
     return (
