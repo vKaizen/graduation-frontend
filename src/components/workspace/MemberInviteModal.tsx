@@ -52,6 +52,9 @@ export function MemberInviteModal({
 
     setIsLoading(true);
 
+    // Store the current role value to ensure it doesn't change during the async operation
+    const currentRole = selectedRole;
+
     try {
       // Split emails by commas and clean whitespace
       const emailList = emails
@@ -84,7 +87,7 @@ export function MemberInviteModal({
       // Send invites to each user
       const invitePromises = matchedUsers.map((user) => {
         console.log(
-          `Sending invite to ${user.email} with role: ${selectedRole} and selected projects:`,
+          `Sending invite to ${user.email} with role: ${currentRole} and selected projects:`,
           selectedProjects
         );
         return createInvite(
@@ -92,7 +95,7 @@ export function MemberInviteModal({
           user._id,
           workspaceId,
           selectedProjects.length > 0 ? selectedProjects : undefined,
-          selectedRole // Pass the selected role to createInvite
+          currentRole // Use the stored role value here
         );
       });
 
@@ -100,7 +103,7 @@ export function MemberInviteModal({
 
       toast.success(`Invitations sent to ${matchedUsers.length} users`);
 
-      // Reset form
+      // Reset form only after successful send
       setEmails("");
       setSelectedProjects([]);
       setSelectedRole("member");

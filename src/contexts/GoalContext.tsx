@@ -9,6 +9,8 @@ import React, {
 } from "react";
 import { Goal } from "@/types";
 import { fetchGoals, fetchGoalById } from "@/api-service";
+import { useAuth } from "@/contexts/AuthContext";
+import { getAuthCookie } from "@/lib/cookies";
 
 type GoalContextType = {
   goals: Goal[];
@@ -17,7 +19,7 @@ type GoalContextType = {
   loading: boolean;
 };
 
-const GoalContext = createContext<GoalContextType | null>(null);
+const GoalContext = createContext<GoalContextType | undefined>(undefined);
 
 export const useGoals = () => {
   const context = useContext(GoalContext);
@@ -31,28 +33,51 @@ export const GoalProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const { isAuthenticated } = useAuth();
 
-  // Fetch all goals initially
+  // Fetch all goals initially, but only if authenticated
   useEffect(() => {
+    // Skip fetchGoals during initial render
+    if (typeof window === 'undefined') return;
+    
+    const authToken = getAuthCookie();
+    if (!authToken || !isAuthenticated) {
+      // No token or not authenticated - don't even try to load goals
+      console.log("GoalProvider: No auth token or not authenticated, skipping goal fetch");
+      setLoading(false);
+      return;
+    }
+
     const loadGoals = async () => {
       try {
+        console.log("GoalProvider: Attempting to load goals with auth token");
         setLoading(true);
         const fetchedGoals = await fetchGoals();
         setGoals(fetchedGoals);
+        console.log(`GoalProvider: Successfully loaded ${fetchedGoals.length} goals`);
       } catch (error) {
-        console.error("Error loading goals:", error);
+        console.error("GoalProvider: Error loading goals:", error);
+        // Silently fail - don't set error state as this might be expected during logout
+        setGoals([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadGoals();
-  }, []);
+    // Only load goals if we have a token and we're authenticated
+    if (authToken && isAuthenticated) {
+      loadGoals();
+    }
+  }, [isAuthenticated]); // Re-run when authentication state changes
 
   // Function to refresh a specific goal's data
   const refreshGoal = useCallback(
     async (goalId: string): Promise<Goal | null> => {
+      // Skip if not authenticated or no token
+      const authToken = getAuthCookie();
+      if (!authToken || !isAuthenticated) return null;
+      
       try {
         const updatedGoal = await fetchGoalById(goalId);
 
@@ -67,7 +92,7 @@ export const GoalProvider: React.FC<{ children: React.ReactNode }> = ({
         return null;
       }
     },
-    []
+    [isAuthenticated]
   );
 
   // Function to manually update a goal's progress in the local state

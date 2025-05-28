@@ -2,6 +2,8 @@
 
 import { useEffect, useCallback } from "react";
 import { useGoals } from "@/contexts/GoalContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { getAuthCookie } from "@/lib/cookies";
 import {
   updateTaskCompletionAndProgress,
   updateProjectStatusAndProgress,
@@ -19,37 +21,54 @@ const recentUpdates = {
 // Component that listens for goal progress updates
 export const GoalProgressListener = () => {
   const { goals, refreshGoal, updateGoalProgress } = useGoals();
+  const { isAuthenticated } = useAuth();
 
   // Helper function to refresh all goals
   const refreshAllGoals = useCallback(async () => {
-    if (recentUpdates.updatingGoals) return;
+    // Don't try to update if there's no auth token
+    const authToken = getAuthCookie();
+    if (recentUpdates.updatingGoals || !isAuthenticated || !authToken) return;
 
     try {
       recentUpdates.updatingGoals = true;
-      console.log("Refreshing all goals progress");
+      console.log("GoalProgressListener: Refreshing all goals progress");
 
       // Get all goals with task/project progress source
-      const allGoals = await fetchGoals();
+      try {
+        const allGoals = await fetchGoals();
 
-      for (const goal of allGoals) {
-        if (
-          goal.progressResource === "tasks" ||
-          goal.progressResource === "projects"
-        ) {
-          const progress = await calculateGoalProgress(goal._id);
-          updateGoalProgress(goal._id, progress);
+        for (const goal of allGoals) {
+          if (
+            goal.progressResource === "tasks" ||
+            goal.progressResource === "projects"
+          ) {
+            try {
+              const progress = await calculateGoalProgress(goal._id);
+              updateGoalProgress(goal._id, progress);
+            } catch (goalError) {
+              console.error(
+                `Error calculating progress for goal ${goal._id}:`,
+                goalError
+              );
+              // Continue with next goal
+            }
+          }
         }
+      } catch (fetchError) {
+        console.error("Error fetching goals in refreshAllGoals:", fetchError);
       }
     } catch (error) {
-      console.error("Error refreshing goals:", error);
+      console.error("GoalProgressListener: Error refreshing goals:", error);
     } finally {
       recentUpdates.updatingGoals = false;
     }
-  }, [updateGoalProgress]);
+  }, [updateGoalProgress, isAuthenticated]);
 
   // Patch the task completion method
   const patchTaskCompletionMethod = useCallback(() => {
-    if (typeof window === "undefined") return;
+    // Don't try to patch if there's no auth token
+    const authToken = getAuthCookie();
+    if (typeof window === "undefined" || !isAuthenticated || !authToken) return;
 
     // Store original function if not already stored
     if (!(window as any).__originalUpdateTaskCompletion) {
@@ -66,32 +85,43 @@ export const GoalProgressListener = () => {
       // Track that we've had a recent update
       recentUpdates.lastTaskUpdate = Date.now();
 
-      // Call the original function
-      const result = await (window as any).__originalUpdateTaskCompletion(
-        taskId,
-        completionStatus,
-        goalId
-      );
-
-      // Update goals in context
-      if (result.updatedGoals && result.updatedGoals.length > 0) {
-        result.updatedGoals.forEach(
-          (goalUpdate: { goalId: string; progress: number }) => {
-            updateGoalProgress(goalUpdate.goalId, goalUpdate.progress);
-          }
+      try {
+        // Call the original function
+        const result = await (window as any).__originalUpdateTaskCompletion(
+          taskId,
+          completionStatus,
+          goalId
         );
-      } else {
-        // If no goals were updated, trigger a full refresh
-        refreshAllGoals();
-      }
 
-      return result;
+        // Update goals in context
+        if (result.updatedGoals && result.updatedGoals.length > 0) {
+          result.updatedGoals.forEach(
+            (goalUpdate: { goalId: string; progress: number }) => {
+              updateGoalProgress(goalUpdate.goalId, goalUpdate.progress);
+            }
+          );
+        } else {
+          // If no goals were updated, trigger a full refresh
+          refreshAllGoals();
+        }
+
+        return result;
+      } catch (error) {
+        console.error(
+          "Error in patched updateTaskCompletionAndProgress:",
+          error
+        );
+        // Return empty result to avoid breaking the UI
+        return { task: null, updatedGoals: [] };
+      }
     };
-  }, [updateGoalProgress, refreshAllGoals]);
+  }, [updateGoalProgress, refreshAllGoals, isAuthenticated]);
 
   // Patch the project status method
   const patchProjectStatusMethod = useCallback(() => {
-    if (typeof window === "undefined") return;
+    // Don't try to patch if there's no auth token
+    const authToken = getAuthCookie();
+    if (typeof window === "undefined" || !isAuthenticated || !authToken) return;
 
     // Store original function if not already stored
     if (!(window as any).__originalUpdateProjectStatus) {
@@ -108,37 +138,69 @@ export const GoalProgressListener = () => {
       // Track that we've had a recent update
       recentUpdates.lastProjectUpdate = Date.now();
 
-      // Call the original function
-      const result = await (window as any).__originalUpdateProjectStatus(
-        projectId,
-        completionStatus,
-        goalId
-      );
-
-      // Update goals in context
-      if (result.updatedGoals && result.updatedGoals.length > 0) {
-        result.updatedGoals.forEach(
-          (goalUpdate: { goalId: string; progress: number }) => {
-            updateGoalProgress(goalUpdate.goalId, goalUpdate.progress);
-          }
+      try {
+        // Call the original function
+        const result = await (window as any).__originalUpdateProjectStatus(
+          projectId,
+          completionStatus,
+          goalId
         );
-      } else {
-        // If no goals were updated, trigger a full refresh
-        refreshAllGoals();
-      }
 
-      return result;
+        // Update goals in context
+        if (result.updatedGoals && result.updatedGoals.length > 0) {
+          result.updatedGoals.forEach(
+            (goalUpdate: { goalId: string; progress: number }) => {
+              updateGoalProgress(goalUpdate.goalId, goalUpdate.progress);
+            }
+          );
+        } else {
+          // If no goals were updated, trigger a full refresh
+          refreshAllGoals();
+        }
+
+        return result;
+      } catch (error) {
+        console.error(
+          "Error in patched updateProjectStatusAndProgress:",
+          error
+        );
+        // Return empty result to avoid breaking the UI
+        return { project: null, updatedGoals: [] };
+      }
     };
-  }, [updateGoalProgress, refreshAllGoals]);
+  }, [updateGoalProgress, refreshAllGoals, isAuthenticated]);
 
   // Setup the patched methods and polling for updates
   useEffect(() => {
+    // Skip everything if we're not in a browser
+    if (typeof window === "undefined") return;
+
+    // Skip setting up listeners if not authenticated or no token
+    const authToken = getAuthCookie();
+    if (!isAuthenticated || !authToken) {
+      console.log(
+        "GoalProgressListener: No auth token or not authenticated, skipping setup"
+      );
+      return;
+    }
+
+    console.log("GoalProgressListener: Setting up goal progress listeners");
+
     // Patch the API methods
     patchTaskCompletionMethod();
     patchProjectStatusMethod();
 
     // Set up a periodic check for goal updates (every 5 seconds)
     const intervalId = setInterval(() => {
+      // Skip if no longer authenticated or token is gone
+      const currentToken = getAuthCookie();
+      if (!isAuthenticated || !currentToken) {
+        console.log(
+          "GoalProgressListener: Lost authentication during interval, skipping update"
+        );
+        return;
+      }
+
       const now = Date.now();
       const taskUpdateAge = now - recentUpdates.lastTaskUpdate;
       const projectUpdateAge = now - recentUpdates.lastProjectUpdate;
@@ -152,14 +214,23 @@ export const GoalProgressListener = () => {
       }
     }, 5000);
 
-    // Initial refresh
-    refreshAllGoals();
+    // Initial refresh with a slight delay to ensure auth is fully established
+    setTimeout(() => {
+      if (isAuthenticated && getAuthCookie()) {
+        refreshAllGoals();
+      }
+    }, 2000);
 
     // Cleanup on unmount
     return () => {
       clearInterval(intervalId);
     };
-  }, [patchTaskCompletionMethod, patchProjectStatusMethod, refreshAllGoals]);
+  }, [
+    patchTaskCompletionMethod,
+    patchProjectStatusMethod,
+    refreshAllGoals,
+    isAuthenticated,
+  ]);
 
   // This component doesn't render anything
   return null;

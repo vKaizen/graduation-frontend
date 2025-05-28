@@ -189,9 +189,41 @@ export default function GoalDetailsPage() {
     if (isLoadingRef.current) return;
     isLoadingRef.current = true;
     setLoading(true);
+
+    // Clear previous errors
+    setError(null);
+
     try {
+      if (
+        !goalId ||
+        typeof goalId !== "string" ||
+        !goalId.match(/^[0-9a-fA-F]{24}$/)
+      ) {
+        throw new Error(`Invalid goal ID format: ${goalId}`);
+      }
+
+      console.log(`Attempting to fetch goal with ID: ${goalId}`);
+
       // First fetch the goal to get its workspace ID
-      const goalData = await fetchGoalById(goalId);
+      let goalData;
+      try {
+        goalData = await fetchGoalById(goalId);
+
+        if (!goalData || typeof goalData !== "object") {
+          throw new Error("Invalid goal data received from server");
+        }
+
+        console.log("Successfully retrieved goal data:", goalData._id);
+      } catch (goalError: any) {
+        console.error("Error fetching goal:", goalError);
+        // Show user-friendly error message
+        setError(`Failed to load goal: ${goalError.message || "Server error"}`);
+        setLoading(false);
+        isLoadingRef.current = false;
+        return; // Exit early
+      }
+
+      // Set goal in state
       setGoal(goalData);
 
       // Add debug logs to understand the structure of the goal data
@@ -248,197 +280,84 @@ export default function GoalDetailsPage() {
           );
           const workspaces = await fetchWorkspaces();
           if (workspaces && workspaces.length > 0) {
-            const firstWorkspaceId = workspaces[0]._id;
-
-            // Validate the fallback workspace ID as well
-            if (isValidMongoId(firstWorkspaceId)) {
-              workspaceId = firstWorkspaceId;
-              console.log(
-                `Using first workspace ID as fallback: ${workspaceId}`
-              );
-            } else {
-              console.error("Fallback workspace ID is also invalid");
-            }
+            workspaceId = workspaces[0]._id;
+            console.log(`Using first available workspace ID: ${workspaceId}`);
           } else {
-            console.error(
-              "No workspaces found and goal has no valid workspace ID"
-            );
+            console.warn("No workspaces found");
           }
-        } catch (workspaceError) {
-          console.error(
-            "Error fetching workspaces for fallback:",
-            workspaceError
-          );
+        } catch (workspacesError) {
+          console.error("Error fetching workspaces:", workspacesError);
         }
       }
 
-      let fetchedTasks: Task[] = [];
-      let usersData, projectsData;
-
+      // Fetch all users (for comments and assignments)
       try {
-        // Fetch users and projects in parallel
-        [usersData, projectsData] = await Promise.all([
-          fetchUsers(),
-          fetchProjects(),
-        ]);
+        const usersData = await fetchUsers();
+        setUsers(usersData);
+      } catch (usersError) {
+        console.error("Error fetching users:", usersError);
+        // Non-critical error, continue with empty users array
+        setUsers([]);
+      }
 
-        // Fetch tasks separately to handle errors
+      // Fetch projects if we have a workspace ID
+      try {
         if (workspaceId) {
-          console.log(
-            `Attempting to fetch tasks with workspace ID:`,
-            workspaceId
-          );
-          try {
-            // Instead of using fetchTasksByWorkspace, get projects first then tasks
-            if (!isValidMongoId(workspaceId)) {
-              console.error(
-                `Cannot fetch projects: Invalid workspace ID format: ${workspaceId}`
-              );
-              throw new Error("Invalid workspace ID format");
-            }
+          const projectsData = await fetchProjectsByWorkspace(workspaceId);
+          setProjects(projectsData);
+        } else {
+          // Fallback to fetching all projects if no workspace ID
+          const projectsData = await fetchProjects();
+          setProjects(projectsData);
+        }
+      } catch (projectsError) {
+        console.error("Error fetching projects:", projectsError);
+        // Non-critical error, continue with empty projects array
+        setProjects([]);
+      }
 
-            console.log(
-              `Fetching projects with validated workspace ID: ${workspaceId}`
-            );
-            const projects = await fetchProjectsByWorkspace(workspaceId);
+      // Initialize progress history data
+      updateProgressHistory(goalData);
 
-            if (projects && projects.length > 0) {
-              // Fetch tasks for each project and combine them
-              let allTasks: Task[] = [];
+      // If the goal has linked projects or tasks, fetch those tasks
+      try {
+        if (
+          goalData.projects &&
+          Array.isArray(goalData.projects) &&
+          goalData.projects.length > 0
+        ) {
+          // Collect all tasks from all projects
+          const allTasks: Task[] = [];
 
-              await Promise.all(
-                projects.map(async (project: Project) => {
-                  try {
-                    const projectTasks = await fetchTasksByProject(project._id);
-                    if (projectTasks && projectTasks.length > 0) {
-                      allTasks = [...allTasks, ...projectTasks];
-                    }
-                  } catch (err) {
-                    console.error(
-                      `Error fetching tasks for project ${project._id}:`,
-                      err
-                    );
-                  }
-                })
-              );
-
-              console.log(
-                `Successfully fetched ${allTasks.length} tasks from all projects`
-              );
-              fetchedTasks = allTasks;
-            } else {
-              console.log("No projects found in the workspace");
-            }
-          } catch (taskError) {
-            console.error(`Error fetching tasks for workspace:`, taskError);
-
-            // Try fallback with first workspace
+          for (const projectId of goalData.projects) {
             try {
-              const workspaces = await fetchWorkspaces();
-              if (workspaces && workspaces.length > 0) {
-                const firstWorkspace = workspaces[0];
-                console.log(`Using first available workspace as fallback`);
-
-                // Use the same approach for the fallback - get projects first, then tasks
-                const firstWorkspaceId = firstWorkspace._id;
-
-                if (!isValidMongoId(firstWorkspaceId)) {
-                  console.error(
-                    `Cannot fetch projects: Invalid fallback workspace ID format: ${firstWorkspaceId}`
-                  );
-                  throw new Error("Invalid fallback workspace ID format");
-                }
-
-                console.log(
-                  `Fetching projects with validated fallback workspace ID: ${firstWorkspaceId}`
-                );
-                const projects = await fetchProjectsByWorkspace(
-                  firstWorkspaceId
-                );
-
-                if (projects && projects.length > 0) {
-                  // Fetch tasks for each project and combine them
-                  let allTasks: Task[] = [];
-
-                  await Promise.all(
-                    projects.map(async (project: Project) => {
-                      try {
-                        const projectTasks = await fetchTasksByProject(
-                          project._id
-                        );
-                        if (projectTasks && projectTasks.length > 0) {
-                          allTasks = [...allTasks, ...projectTasks];
-                        }
-                      } catch (err) {
-                        console.error(
-                          `Error fetching tasks for project ${project._id}:`,
-                          err
-                        );
-                      }
-                    })
-                  );
-
-                  console.log(
-                    `Successfully fetched ${allTasks.length} tasks from fallback workspace`
-                  );
-                  fetchedTasks = allTasks;
-                } else {
-                  console.log("No projects found in the fallback workspace");
-                }
+              const projectTasks = await fetchTasksByProject(
+                typeof projectId === "object" ? projectId._id : projectId
+              );
+              if (projectTasks && Array.isArray(projectTasks)) {
+                allTasks.push(...projectTasks);
               }
-            } catch (fallbackError) {
+            } catch (taskError) {
               console.error(
-                "Failed to fetch tasks with fallback workspace:",
-                fallbackError
+                `Error fetching tasks for project ${projectId}:`,
+                taskError
               );
             }
           }
-        } else {
-          console.warn("No workspace ID found on the goal");
+
+          setTasks(allTasks);
         }
-      } catch (fetchError) {
-        console.error("Error fetching supplementary data:", fetchError);
-        // Continue with what we have - we already have the goal data
+      } catch (tasksError) {
+        console.error("Error processing tasks:", tasksError);
+        // Non-critical error, continue with empty tasks array
+        setTasks([]);
       }
-
-      setUsers(usersData || []);
-      setProjects(projectsData || []);
-      setTasks(fetchedTasks);
-
-      // For demo purposes - in a real app, comments would be fetched from the API
-      if (usersData && usersData.length > 0) {
-        setComments([
-          {
-            id: "1",
-            user:
-              usersData.find(
-                (u) => u._id === getUserId(goalData.ownerId || goalData.owner)
-              ) || usersData[0],
-            content: "Let's make sure we stay on track with this goal.",
-            timestamp: new Date(Date.now() - 86400000), // 1 day ago
-          },
-          {
-            id: "2",
-            user: usersData[Math.floor(Math.random() * usersData.length)],
-            content: "I've started working on the first milestone.",
-            timestamp: new Date(Date.now() - 43200000), // 12 hours ago
-          },
-        ]);
-      }
-
-      // Immediately recalculate progress to ensure it's up to date
-      try {
-        await calculateGoalProgress(goalId);
-        // Fetch the goal again to get the updated progress
-        const updatedGoal = await fetchGoalById(goalId);
-        setGoal(updatedGoal);
-        updateProgressHistory(updatedGoal);
-      } catch (progressError) {
-        console.error("Error calculating goal progress:", progressError);
-      }
-    } catch (err) {
-      console.error("Error loading goal data:", err);
-      setError("Failed to load goal details. Please try again.");
+    } catch (error: any) {
+      console.error("Error in loadData:", error);
+      setError(
+        `Failed to load goal details: ${error.message || "Unknown error"}`
+      );
+      setGoal(null);
     } finally {
       setLoading(false);
       isLoadingRef.current = false;
